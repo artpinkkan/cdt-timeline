@@ -771,10 +771,6 @@ function ProjectPage({ project, tasks, view, setView, gRef, todayX, kpis, onAdd,
       {/* Action bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 24px 16px' }}>
         <button onClick={onAdd} style={T.btnPrimary}>+ Add Task</button>
-        <button onClick={onGenTasks} style={{ ...T.btnGhost, display: 'flex', alignItems: 'center', gap: 5, opacity: 0.65 }}>
-          ✨ Generate Tasks
-          <span style={{ fontSize: 10, background: '#F1F5F9', color: T.faint, borderRadius: 4, padding: '1px 5px', fontWeight: 700 }}>Soon</span>
-        </button>
         {view === 'gantt' && <button onClick={onGoToToday} style={T.btnGhost}>Go to Today</button>}
         <button onClick={() => {
           setExporting(true);
@@ -1138,20 +1134,6 @@ function KanbanView({ tasks, onEdit, onDel }: any) {
 function TaskModal({ task, onSave, onClose }: any) {
   const [f, setF] = useState(() => task ? { ...task } : { subject: '', planStart: '', planEnd: '', actStart: '', actEnd: '', pic: '', done: false });
   const upd = (k: string, v: any) => setF((p: any) => ({ ...p, [k]: v }));
-
-  if (task === 'generate') {
-    return (
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.35)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-        <div onClick={(e) => e.stopPropagation()} style={{ ...T.card, padding: 36, width: 420, maxWidth: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.12)', textAlign: 'center' }}>
-          <div style={{ width: 56, height: 56, borderRadius: 16, background: 'linear-gradient(135deg,#8B5CF6,#6366F1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, margin: '0 auto 16px' }}>✨</div>
-          <h3 style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 700, color: T.text }}>AI Task Generation</h3>
-          <div style={{ display: 'inline-block', background: '#EEF2FF', color: T.accent, fontSize: 10, fontWeight: 700, padding: '3px 11px', borderRadius: 20, letterSpacing: '0.7px', textTransform: 'uppercase', marginBottom: 16 }}>Coming Soon</div>
-          <p style={{ margin: '0 0 26px', fontSize: 13, color: T.muted, lineHeight: 1.7 }}>Automatically generate tasks using AI. This feature is currently under development and will be available soon.</p>
-          <button onClick={onClose} style={T.btnPrimary}>Got it</button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.35)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
