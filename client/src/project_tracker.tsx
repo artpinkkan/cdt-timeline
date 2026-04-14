@@ -307,13 +307,27 @@ export default function App() {
   const gRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // Render cached data instantly while fresh data loads in background
+    try {
+      const cached = localStorage.getItem('fp_cache');
+      if (cached) {
+        const { projects: cp, projectTasks: ct } = JSON.parse(cached);
+        setProjects(cp);
+        setProjectTasks(ct);
+        setLoading(false);
+      }
+    } catch {}
+
     (async () => {
       try {
         const projs = await projectsApi.list();
         setProjects(projs);
+        // Fetch all project tasks in parallel
+        const results = await Promise.all(projs.map((p: any) => tasksApi.list(p.id)));
         const pt: Record<number, any[]> = {};
-        for (const p of projs) pt[p.id] = await tasksApi.list(p.id);
+        projs.forEach((p: any, i: number) => { pt[p.id] = results[i]; });
         setProjectTasks(pt);
+        localStorage.setItem('fp_cache', JSON.stringify({ projects: projs, projectTasks: pt }));
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
     })();
@@ -330,10 +344,25 @@ export default function App() {
   const txDay = (ds: string) => (ds ? Math.round(((new Date(ds).getTime() - tlS.getTime()) / 86400000 / tlDays) * TL_W) : null);
   const todayX = txDay(todayStr);
 
+  const updateCache = (nextProjects: any[], nextTasks: Record<number, any[]>) => {
+    try { localStorage.setItem('fp_cache', JSON.stringify({ projects: nextProjects, projectTasks: nextTasks })); } catch {}
+  };
+
   const saveProject = async (p: any) => {
     try {
-      if (p.id) { await projectsApi.update(p.id, p); setProjects(projects.map((x) => (x.id === p.id ? p : x))); }
-      else { const c = await projectsApi.create(p); setProjects([...projects, c]); setProjectTasks({ ...projectTasks, [c.id]: [] }); }
+      let nextProjects: any[];
+      if (p.id) {
+        await projectsApi.update(p.id, p);
+        nextProjects = projects.map((x) => (x.id === p.id ? p : x));
+      } else {
+        const c = await projectsApi.create(p);
+        nextProjects = [...projects, c];
+        const nextTasks = { ...projectTasks, [c.id]: [] };
+        setProjectTasks(nextTasks);
+        updateCache(nextProjects, nextTasks);
+      }
+      setProjects(nextProjects);
+      updateCache(nextProjects, projectTasks);
       setProjModal(null);
     } catch (e) { console.error(e); }
   };
@@ -341,29 +370,47 @@ export default function App() {
     const proj = projects.find((p: any) => p.id === id);
     if (!window.confirm(`Delete "${proj?.name ?? 'this project'}" and all its tasks? This cannot be undone.`)) return;
     try {
-      await projectsApi.delete(id); setProjects(projects.filter((p: any) => p.id !== id));
-      const npt = { ...projectTasks }; delete npt[id]; setProjectTasks(npt);
+      await projectsApi.delete(id);
+      const nextProjects = projects.filter((p: any) => p.id !== id);
+      const nextTasks = { ...projectTasks }; delete nextTasks[id];
+      setProjects(nextProjects); setProjectTasks(nextTasks);
+      updateCache(nextProjects, nextTasks);
       if (activeId === id) setActiveId(null);
     } catch (e) { console.error(e); }
   };
   const saveTask = async (t: any) => {
     try {
       if (activeId) {
-        if (t.id) { await tasksApi.update(activeId, t.id, t); setProjectTasks({ ...projectTasks, [activeId]: tasks.map((x) => (x.id === t.id ? t : x)) }); }
-        else { const c = await tasksApi.create(activeId, t); setProjectTasks({ ...projectTasks, [activeId]: [...tasks, c] }); }
+        let nextTasks: any[];
+        if (t.id) { await tasksApi.update(activeId, t.id, t); nextTasks = tasks.map((x) => (x.id === t.id ? t : x)); }
+        else { const c = await tasksApi.create(activeId, t); nextTasks = [...tasks, c]; }
+        const nextProjectTasks = { ...projectTasks, [activeId]: nextTasks };
+        setProjectTasks(nextProjectTasks);
+        updateCache(projects, nextProjectTasks);
       }
       setTaskModal(null);
     } catch (e) { console.error(e); }
   };
   const delTask = async (id: number) => {
-    try { if (activeId) { await tasksApi.delete(activeId, id); setProjectTasks({ ...projectTasks, [activeId]: tasks.filter((x) => x.id !== id) }); } }
-    catch (e) { console.error(e); }
+    try {
+      if (activeId) {
+        await tasksApi.delete(activeId, id);
+        const nextProjectTasks = { ...projectTasks, [activeId]: tasks.filter((x) => x.id !== id) };
+        setProjectTasks(nextProjectTasks);
+        updateCache(projects, nextProjectTasks);
+      }
+    } catch (e) { console.error(e); }
   };
   const togTask = async (id: number) => {
     try {
       if (activeId) {
         const task = tasks.find((x) => x.id === id);
-        if (task) { await tasksApi.toggle(activeId, id); setProjectTasks({ ...projectTasks, [activeId]: tasks.map((x) => (x.id === id ? { ...x, done: !x.done } : x)) }); }
+        if (task) {
+          await tasksApi.toggle(activeId, id);
+          const nextProjectTasks = { ...projectTasks, [activeId]: tasks.map((x) => (x.id === id ? { ...x, done: !x.done } : x)) };
+          setProjectTasks(nextProjectTasks);
+          updateCache(projects, nextProjectTasks);
+        }
       }
     } catch (e) { console.error(e); }
   };
