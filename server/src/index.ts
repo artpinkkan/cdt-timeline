@@ -44,10 +44,7 @@ app.get('/api/health', (_, res) => {
 });
 
 // Serve static files in production
-import { fileURLToPath } from 'url';
 import path from 'path';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../../client/dist')));
