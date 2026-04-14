@@ -600,7 +600,6 @@ function Dashboard({ projects, projectTasks, onSelect, onNew, onEdit, onDelete }
 function ProjectPage({ project, tasks, view, setView, gRef, todayX, kpis, onAdd, onEditTask, onDelTask, onTogTask, onReorderTasks, onEditProject, onGoToToday, onGenTasks }: any) {
   const [showIR, setShowIR] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [pdfPreview, setPdfPreview] = useState<string | null>(null);
 
   return (
     <div>
@@ -667,7 +666,10 @@ function ProjectPage({ project, tasks, view, setView, gRef, todayX, kpis, onAdd,
         <button onClick={() => {
           setExporting(true);
           buildProjectPDF(project, tasks)
-            .then(doc => setPdfPreview(doc.output('datauristring')))
+            .then(doc => {
+              const url = URL.createObjectURL(doc.output('blob'));
+              window.open(url, '_blank');
+            })
             .catch(console.error)
             .finally(() => setExporting(false));
         }} disabled={exporting} style={{ ...T.btnGhost, opacity: exporting ? 0.5 : 1 }}>
@@ -690,29 +692,6 @@ function ProjectPage({ project, tasks, view, setView, gRef, todayX, kpis, onAdd,
         {view === 'kanban' && <KanbanView tasks={tasks} onEdit={onEditTask} onDel={onDelTask} onTog={onTogTask} />}
       </div>
 
-      {/* PDF Preview Modal */}
-      {pdfPreview && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(4px)', zIndex: 2000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-          <div style={{ background: T.surface, borderRadius: 16, boxShadow: '0 24px 80px rgba(0,0,0,0.2)', width: '100%', maxWidth: 1000, display: 'flex', flexDirection: 'column', overflow: 'hidden', maxHeight: '90vh' }}>
-            {/* Modal header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 14, color: T.text }}>PDF Preview</div>
-                <div style={{ fontSize: 11, color: T.faint, marginTop: 2 }}>{project.name}</div>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <a href={pdfPreview} download={`${project.name.replace(/[^a-z0-9]/gi, '_')}_report.pdf`}
-                  style={{ ...T.btnPrimary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                  ⬇ Download PDF
-                </a>
-                <button onClick={() => setPdfPreview(null)} style={T.btnGhost}>✕ Close</button>
-              </div>
-            </div>
-            {/* iframe preview */}
-            <iframe src={pdfPreview} style={{ flex: 1, border: 'none', minHeight: 500 }} title="PDF Preview" />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
