@@ -18,6 +18,8 @@ export async function migrate() {
       ir_code TEXT,
       description TEXT,
       color TEXT NOT NULL DEFAULT '#3B82F6',
+      plan_start TEXT,
+      plan_end TEXT,
       created_at TEXT NOT NULL
     );
 
@@ -34,6 +36,10 @@ export async function migrate() {
       sort_order INTEGER NOT NULL DEFAULT 0
     );
   `);
+
+  // Add plan_start / plan_end to projects if missing (idempotent)
+  try { await db.run('ALTER TABLE projects ADD COLUMN plan_start TEXT'); } catch {}
+  try { await db.run('ALTER TABLE projects ADD COLUMN plan_end TEXT'); } catch {}
 
   // Check if admin user already exists
   const adminUser = await db.get('SELECT * FROM users WHERE username = ?', [process.env.ADMIN_USER || 'admin']);
