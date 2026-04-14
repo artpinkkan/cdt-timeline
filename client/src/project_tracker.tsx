@@ -177,14 +177,16 @@ async function buildProjectPDF(project: any, tasks: any[]): Promise<any> {
 
     const BAND_Y  = PAGE_TITLE_H;      // month band starts right after title
     const WEEK_Y  = BAND_Y + 8;        // week row
-    const HDR_BOT = WEEK_Y + 8;        // = DATA_START = 32
+    const HDR_BOT = WEEK_Y + 8;        // bottom of header bands = 32
+    const GAP_H   = 4;                 // breathing room between header and first row
+    const ROW_START = HDR_BOT + GAP_H; // y where task rows actually begin
 
-    const dataEndY = HDR_BOT + pageTasks.length * ROW_H;
+    const dataEndY = ROW_START + pageTasks.length * ROW_H;
 
     // ── Draw vertical week grid lines (behind everything) ───────────────
     doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.15);
     weeks.forEach(wk => {
-      doc.line(wk.x, BAND_Y, wk.x, dataEndY);
+      doc.line(wk.x, BAND_Y, wk.x, dataEndY); // extends through gap into rows
     });
 
     // ── Month band row ──────────────────────────────────────────────────
@@ -200,8 +202,9 @@ async function buildProjectPDF(project: any, tasks: any[]): Promise<any> {
       doc.setDrawColor(71, 85, 105); doc.setLineWidth(0.3);
       doc.line(b.x, BAND_Y, b.x, BAND_Y + 8);
       if (b.w > 4) {
-        doc.setTextColor(203, 213, 225); doc.setFontSize(6.5); doc.setFont('helvetica', 'bold');
-        doc.text(b.label, b.x + b.w / 2, BAND_Y + 5.5, { align: 'center', maxWidth: b.w - 2 });
+        doc.setTextColor(203, 213, 225); doc.setFontSize(5.5); doc.setFont('helvetica', 'bold');
+        // no maxWidth — prevents jsPDF from wrapping the label onto two lines
+        doc.text(b.label, b.x + b.w / 2, BAND_Y + 5.5, { align: 'center' });
       }
     });
 
@@ -227,7 +230,7 @@ async function buildProjectPDF(project: any, tasks: any[]): Promise<any> {
 
     // ── Task rows ───────────────────────────────────────────────────────
     pageTasks.forEach((t: any, i: number) => {
-      const y = HDR_BOT + i * ROW_H;
+      const y = ROW_START + i * ROW_H;
       const globalIdx = startIdx + i;
 
       // alternating row bg
