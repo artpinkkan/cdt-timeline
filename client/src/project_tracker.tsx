@@ -338,8 +338,10 @@ export default function App() {
     } catch (e) { console.error(e); }
   };
   const delProject = async (id: number) => {
+    const proj = projects.find((p: any) => p.id === id);
+    if (!window.confirm(`Delete "${proj?.name ?? 'this project'}" and all its tasks? This cannot be undone.`)) return;
     try {
-      await projectsApi.delete(id); setProjects(projects.filter((p) => p.id !== id));
+      await projectsApi.delete(id); setProjects(projects.filter((p: any) => p.id !== id));
       const npt = { ...projectTasks }; delete npt[id]; setProjectTasks(npt);
       if (activeId === id) setActiveId(null);
     } catch (e) { console.error(e); }
