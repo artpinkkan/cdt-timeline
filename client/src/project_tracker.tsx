@@ -394,13 +394,18 @@ export default function App() {
     </div>
   );
 
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const sidebarW = sidebarCollapsed ? 60 : 234;
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: "'Inter',system-ui,sans-serif", fontSize: 13, background: T.bg }}>
       <Sidebar projects={projects} projectTasks={projectTasks} activeId={activeId} user={user} logout={logout}
         onDashboard={() => setActiveId(null)}
         onSelect={(id: number) => { setActiveId(id); setView('gantt'); }}
-        onNew={() => setProjModal('add')} />
-      <div style={{ flex: 1, overflow: 'auto', minWidth: 0 }}>
+        onNew={() => setProjModal('add')}
+        collapsed={sidebarCollapsed}
+        onToggle={() => setSidebarCollapsed((c: boolean) => !c)} />
+      <div style={{ flex: 1, overflow: 'auto', minWidth: 0, marginLeft: sidebarW, transition: 'margin-left 0.22s cubic-bezier(.4,0,.2,1)' }}>
         {!proj
           ? <Dashboard projects={projects} projectTasks={projectTasks}
               onSelect={(id: number) => { setActiveId(id); setView('gantt'); }}
@@ -426,71 +431,90 @@ export default function App() {
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────
-function Sidebar({ projects, projectTasks, activeId, user, logout, onDashboard, onSelect, onNew }: any) {
+function Sidebar({ projects, projectTasks, activeId, user, logout, onDashboard, onSelect, onNew, collapsed, onToggle }: any) {
   const totT = projects.reduce((s: number, p: any) => s + (projectTasks[p.id] || []).length, 0);
   const totD = projects.reduce((s: number, p: any) => s + (projectTasks[p.id] || []).filter((t: any) => t.done).length, 0);
   const pct = totT ? Math.round((totD / totT) * 100) : 0;
+  const W = collapsed ? 60 : 234;
 
   return (
-    <div style={{ width: 234, flexShrink: 0, background: T.surface, borderRight: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      {/* Logo */}
-      <div style={{ padding: '20px 18px', borderBottom: `1px solid ${T.border}` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+    <div style={{ width: W, flexShrink: 0, position: 'fixed', top: 0, left: 0, height: '100vh', background: T.surface, borderRight: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', zIndex: 100, transition: 'width 0.22s cubic-bezier(.4,0,.2,1)', overflow: 'hidden' }}>
+      {/* Logo + toggle */}
+      <div style={{ padding: collapsed ? '18px 13px' : '18px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, overflow: 'hidden' }}>
           <div style={{ width: 34, height: 34, borderRadius: 10, background: T.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color: '#fff', flexShrink: 0 }}>F</div>
-          <div>
-            <div style={{ color: T.text, fontWeight: 700, fontSize: 14, lineHeight: 1.2 }}>FinalPush.io</div>
-            <div style={{ color: T.faint, fontSize: 11 }}>Temporary App Only</div>
-          </div>
+          {!collapsed && (
+            <div style={{ overflow: 'hidden' }}>
+              <div style={{ color: T.text, fontWeight: 700, fontSize: 14, lineHeight: 1.2, whiteSpace: 'nowrap' }}>FinalPush.io</div>
+              <div style={{ color: T.faint, fontSize: 11, whiteSpace: 'nowrap' }}>Temporary App Only</div>
+            </div>
+          )}
         </div>
+        <button onClick={onToggle} title={collapsed ? 'Expand' : 'Collapse'} style={{ flexShrink: 0, width: 26, height: 26, borderRadius: 7, border: `1px solid ${T.border}`, background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.muted, fontSize: 13, padding: 0 }}>
+          {collapsed ? '›' : '‹'}
+        </button>
       </div>
 
       {/* Nav */}
-      <div style={{ flex: 1, padding: '12px 10px', overflowY: 'auto' }}>
-        <button onClick={onDashboard} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 11px', borderRadius: 9, border: 'none', cursor: 'pointer', marginBottom: 4, background: activeId === null ? '#EEF2FF' : 'transparent', color: activeId === null ? T.accent : T.muted, fontSize: 13, textAlign: 'left', fontWeight: activeId === null ? 700 : 400, transition: 'all 0.15s' }}>
-          <span style={{ fontSize: 14 }}>⊞</span> Dashboard
+      <div style={{ flex: 1, padding: '10px 8px', overflowY: 'auto', overflowX: 'hidden' }}>
+        <button onClick={onDashboard} title="Dashboard" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: collapsed ? '9px 0' : '8px 11px', justifyContent: collapsed ? 'center' : 'flex-start', borderRadius: 9, border: 'none', cursor: 'pointer', marginBottom: 4, background: activeId === null ? '#EEF2FF' : 'transparent', color: activeId === null ? T.accent : T.muted, fontSize: 13, textAlign: 'left', fontWeight: activeId === null ? 700 : 400, transition: 'all 0.15s' }}>
+          <span style={{ fontSize: 14, flexShrink: 0 }}>⊞</span>
+          {!collapsed && 'Dashboard'}
         </button>
 
-        <div style={{ padding: '14px 11px 6px', color: T.faint, fontSize: 10, fontWeight: 700, letterSpacing: '0.9px', textTransform: 'uppercase', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>Projects</span>
-          <span style={{ background: T.bg, color: T.muted, borderRadius: 10, padding: '1px 7px', fontSize: 10 }}>{projects.length}</span>
-        </div>
+        {!collapsed && (
+          <div style={{ padding: '14px 11px 6px', color: T.faint, fontSize: 10, fontWeight: 700, letterSpacing: '0.9px', textTransform: 'uppercase', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>Projects</span>
+            <span style={{ background: T.bg, color: T.muted, borderRadius: 10, padding: '1px 7px', fontSize: 10 }}>{projects.length}</span>
+          </div>
+        )}
+        {collapsed && <div style={{ height: 1, background: T.border, margin: '8px 4px' }} />}
 
         {projects.map((p: any) => {
           const pt = projectTasks[p.id] || [], pd = pt.filter((t: any) => t.done).length, pp = pt.length ? Math.round((pd / pt.length) * 100) : 0, active = activeId === p.id;
           return (
-            <button key={p.id} onClick={() => onSelect(p.id)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 11px', borderRadius: 9, border: 'none', cursor: 'pointer', marginBottom: 2, background: active ? '#EEF2FF' : 'transparent', textAlign: 'left', transition: 'all 0.15s' }}>
+            <button key={p.id} onClick={() => onSelect(p.id)} title={p.name} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: collapsed ? '9px 0' : '8px 11px', justifyContent: collapsed ? 'center' : 'flex-start', borderRadius: 9, border: 'none', cursor: 'pointer', marginBottom: 2, background: active ? '#EEF2FF' : 'transparent', textAlign: 'left', transition: 'all 0.15s' }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: p.color, flexShrink: 0 }} />
-              <div style={{ flex: 1, overflow: 'hidden' }}>
-                <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: active ? T.accent : T.muted, fontSize: 12, fontWeight: active ? 700 : 400 }}>{p.name}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                  <div style={{ flex: 1, height: 3, background: '#F1F5F9', borderRadius: 2 }}>
-                    <div style={{ height: '100%', width: `${pp}%`, background: p.color, borderRadius: 2, transition: 'width 0.3s' }} />
+              {!collapsed && (
+                <div style={{ flex: 1, overflow: 'hidden' }}>
+                  <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: active ? T.accent : T.muted, fontSize: 12, fontWeight: active ? 700 : 400 }}>{p.name}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                    <div style={{ flex: 1, height: 3, background: '#F1F5F9', borderRadius: 2 }}>
+                      <div style={{ height: '100%', width: `${pp}%`, background: p.color, borderRadius: 2, transition: 'width 0.3s' }} />
+                    </div>
+                    <span style={{ fontSize: 10, color: T.faint, flexShrink: 0 }}>{pp}%</span>
                   </div>
-                  <span style={{ fontSize: 10, color: T.faint, flexShrink: 0 }}>{pp}%</span>
                 </div>
-              </div>
+              )}
             </button>
           );
         })}
-        {projects.length === 0 && <div style={{ color: T.faint, fontSize: 11, padding: '12px', textAlign: 'center' }}>No projects yet</div>}
+        {projects.length === 0 && !collapsed && <div style={{ color: T.faint, fontSize: 11, padding: '12px', textAlign: 'center' }}>No projects yet</div>}
       </div>
 
       {/* Footer */}
-      <div style={{ padding: '12px 10px', borderTop: `1px solid ${T.border}` }}>
-        <button onClick={onNew} style={{ width: '100%', padding: '8px 11px', borderRadius: 9, border: `1px solid ${T.border}`, background: 'transparent', color: T.muted, cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 10 }}>
-          <span style={{ fontSize: 16, lineHeight: 1 }}>+</span> New Project
-        </button>
-        <div style={{ background: '#F5F7FF', border: `1px solid ${T.border}`, borderRadius: 12, padding: '11px 13px', marginBottom: user ? 10 : 0 }}>
-          <div style={{ color: T.faint, fontSize: 10, marginBottom: 4 }}>Overall Progress</div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: T.accent, marginBottom: 6 }}>{pct}%</div>
-          <div style={{ height: 5, background: '#E8ECF4', borderRadius: 3 }}>
-            <div style={{ height: '100%', width: `${pct}%`, background: T.accent, borderRadius: 3, transition: 'width 0.3s' }} />
-          </div>
-          <div style={{ color: T.faint, fontSize: 10, marginTop: 5 }}>{totD} / {totT} tasks done</div>
-        </div>
+      <div style={{ padding: collapsed ? '10px 8px' : '12px 10px', borderTop: `1px solid ${T.border}`, flexShrink: 0 }}>
+        {!collapsed && (
+          <>
+            <button onClick={onNew} style={{ width: '100%', padding: '8px 11px', borderRadius: 9, border: `1px solid ${T.border}`, background: 'transparent', color: T.muted, cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 10 }}>
+              <span style={{ fontSize: 16, lineHeight: 1 }}>+</span> New Project
+            </button>
+            <div style={{ background: '#F5F7FF', border: `1px solid ${T.border}`, borderRadius: 12, padding: '11px 13px', marginBottom: user ? 10 : 0 }}>
+              <div style={{ color: T.faint, fontSize: 10, marginBottom: 4 }}>Overall Progress</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: T.accent, marginBottom: 6 }}>{pct}%</div>
+              <div style={{ height: 5, background: '#E8ECF4', borderRadius: 3 }}>
+                <div style={{ height: '100%', width: `${pct}%`, background: T.accent, borderRadius: 3, transition: 'width 0.3s' }} />
+              </div>
+              <div style={{ color: T.faint, fontSize: 10, marginTop: 5 }}>{totD} / {totT} tasks done</div>
+            </div>
+          </>
+        )}
+        {collapsed && (
+          <button onClick={onNew} title="New Project" style={{ width: '100%', padding: '8px 0', borderRadius: 9, border: `1px solid ${T.border}`, background: 'transparent', color: T.muted, cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>+</button>
+        )}
         {user && (
-          <button onClick={logout} style={{ width: '100%', padding: '8px 11px', borderRadius: 9, border: `1px solid ${T.border}`, background: 'transparent', color: T.faint, cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-            Logout
+          <button onClick={logout} title="Logout" style={{ width: '100%', padding: '8px 11px', borderRadius: 9, border: `1px solid ${T.border}`, background: 'transparent', color: T.faint, cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            {collapsed ? '⏻' : 'Logout'}
           </button>
         )}
       </div>
