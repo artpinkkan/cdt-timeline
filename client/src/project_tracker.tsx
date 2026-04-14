@@ -304,6 +304,7 @@ export default function App() {
   const [taskModal, setTaskModal] = useState<any>(null);
   const [projModal, setProjModal] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const gRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -443,7 +444,6 @@ export default function App() {
     </div>
   );
 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const sidebarW = sidebarCollapsed ? 60 : 234;
 
   return (
