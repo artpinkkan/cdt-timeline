@@ -113,135 +113,186 @@ async function buildProjectPDF(project: any, tasks: any[]): Promise<any> {
     margin: { left: 14, right: 14 },
   });
 
-  // ── Page 2: Gantt Chart ───────────────────────────────────────────────
-  doc.addPage();
-  doc.setFillColor(15, 23, 42); doc.rect(0, 0, PW, 14, 'F');
-  doc.setTextColor(255, 255, 255); doc.setFontSize(11); doc.setFont('helvetica', 'bold');
-  doc.text(`${project.name} — Gantt Chart`, 14, 10);
-  doc.setFontSize(7); doc.setFont('helvetica', 'normal');
-  doc.text(`${done}/${N} tasks done`, PW - 14, 10, { align: 'right' });
-
-  // Timeline setup
+  // ── Page 2+: Gantt Chart ─────────────────────────────────────────────
   const allDates = tasks.flatMap((t: any) => [t.planStart, t.planEnd, t.actStart, t.actEnd].filter(Boolean));
-  if (allDates.length === 0) { doc.setTextColor(148, 163, 184); doc.setFontSize(10); doc.text('No task dates available.', PW / 2, 80, { align: 'center' }); }
-  else {
+
+  const ML = 14, MR = 14; // left/right margin
+  const LBL_W = 72;       // label column width
+  const ROW_H = 7;        // row height mm
+  const ROWS_PER_PAGE = 22; // max task rows per gantt page
+  const HDR_H = 16;       // total header height (month band 8 + week row 8)
+  const PAGE_TITLE_H = 16; // dark title bar height
+  const DATA_START = PAGE_TITLE_H + HDR_H; // y where rows begin = 32
+
+  const drawGanttPage = (pageTasks: any[], startIdx: number, totalPages: number, pageNum: number) => {
+    doc.addPage();
+    const TL_X = ML + LBL_W;
+    const TL_W = PW - TL_X - MR;
+    const FOOTER_Y = PH - 8;
+
+    // ── Page title bar ──────────────────────────────────────────────────
+    doc.setFillColor(15, 23, 42);
+    doc.rect(0, 0, PW, PAGE_TITLE_H, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+    doc.text(`${project.name} — Gantt Chart`, ML, 10);
+    doc.setFontSize(7); doc.setFont('helvetica', 'normal');
+    const pageLabel = totalPages > 1 ? ` (${pageNum}/${totalPages})` : '';
+    doc.text(`${done}/${N} tasks done${pageLabel}`, PW - MR, 10, { align: 'right' });
+
+    if (allDates.length === 0) {
+      doc.setTextColor(148, 163, 184); doc.setFontSize(10);
+      doc.text('No task dates available.', PW / 2, 80, { align: 'center' });
+      return;
+    }
+
     const minD = new Date(Math.min(...allDates.map((d: string) => new Date(d).getTime())));
     const maxD = new Date(Math.max(...allDates.map((d: string) => new Date(d).getTime())));
     const tlS = new Date(minD.getTime() - 7 * 86400000);
     const tlE = new Date(maxD.getTime() + 7 * 86400000);
     const tlDays = (tlE.getTime() - tlS.getTime()) / 86400000;
+    const d2x = (ds: string) => TL_X + ((new Date(ds).getTime() - tlS.getTime()) / 86400000 / tlDays) * TL_W;
 
-    // Layout constants (mm)
-    const LBL_W = 70; // left label column
-    const TL_X = 14 + LBL_W + 2; // timeline start x
-    const TL_W_MM = PW - TL_X - 8; // timeline width
-    const ROW_H = 6.5;
-    const HDR1 = 16, HDR2 = 22; // y positions of header rows
-    const DATA_Y = 25; // y where data rows start
-
-    const d2x = (ds: string) => TL_X + ((new Date(ds).getTime() - tlS.getTime()) / 86400000 / tlDays) * TL_W_MM;
-
-    // Build weeks
+    // ── Build week columns ──────────────────────────────────────────────
     const numWeeks = Math.ceil(tlDays / 7);
-    const weeks: { x: number; w: number; wkNum: number; month: number; year: number; d: Date }[] = [];
+    const weeks: { x: number; w: number; wkNum: number; d: Date }[] = [];
     for (let i = 0; i < numWeeks; i++) {
       const wkS = new Date(tlS.getTime() + i * 7 * 86400000);
-      const x = TL_X + (i * 7 / tlDays) * TL_W_MM;
-      const w = (7 / tlDays) * TL_W_MM;
-      weeks.push({ x, w, wkNum: Math.ceil(wkS.getDate() / 7), month: wkS.getMonth(), year: wkS.getFullYear(), d: wkS });
+      weeks.push({
+        x: TL_X + (i * 7 / tlDays) * TL_W,
+        w: (7 / tlDays) * TL_W,
+        wkNum: Math.ceil(wkS.getDate() / 7),
+        d: wkS,
+      });
     }
 
-    // Month bands
+    // ── Build month bands ───────────────────────────────────────────────
     const bands: { label: string; x: number; w: number }[] = [];
     weeks.forEach(wk => {
-      const lbl = wk.d.toLocaleString('en-US', { month: 'short' }) + " '" + String(wk.year).slice(2);
+      const lbl = wk.d.toLocaleString('en-US', { month: 'short' }) + " '" + String(wk.d.getFullYear()).slice(2);
       const last = bands[bands.length - 1];
-      if (last && last.label === lbl) { last.w += wk.w; }
-      else { bands.push({ label: lbl, x: wk.x, w: wk.w }); }
+      if (last && last.label === lbl) last.w += wk.w;
+      else bands.push({ label: lbl, x: wk.x, w: wk.w });
     });
 
-    // Header row 1 — month bands
+    const BAND_Y  = PAGE_TITLE_H;      // month band starts right after title
+    const WEEK_Y  = BAND_Y + 8;        // week row
+    const HDR_BOT = WEEK_Y + 8;        // = DATA_START = 32
+
+    const dataEndY = HDR_BOT + pageTasks.length * ROW_H;
+
+    // ── Draw vertical week grid lines (behind everything) ───────────────
+    doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.15);
+    weeks.forEach(wk => {
+      doc.line(wk.x, BAND_Y, wk.x, dataEndY);
+    });
+
+    // ── Month band row ──────────────────────────────────────────────────
     doc.setFillColor(30, 41, 59);
-    doc.rect(TL_X, HDR1 - 5, TL_W_MM, 5, 'F');
-    doc.setFillColor(248, 250, 252); doc.rect(14, HDR1 - 5, LBL_W, 5, 'F');
-    doc.setTextColor(203, 213, 225); doc.setFontSize(6.5); doc.setFont('helvetica', 'bold');
+    doc.rect(TL_X, BAND_Y, TL_W, 8, 'F');
+    // label column header bg
+    doc.setFillColor(30, 41, 59);
+    doc.rect(ML, BAND_Y, LBL_W, 8, 'F');
+    doc.setTextColor(203, 213, 225); doc.setFontSize(7); doc.setFont('helvetica', 'bold');
+    doc.text('Task Subject', ML + 3, BAND_Y + 5.5);
+    // month labels clipped to their band
     bands.forEach(b => {
-      doc.setDrawColor(71, 85, 105); doc.line(b.x, HDR1 - 5, b.x, HDR1);
-      doc.text(b.label, b.x + b.w / 2, HDR1 - 1, { align: 'center', maxWidth: b.w - 1 });
+      doc.setDrawColor(71, 85, 105); doc.setLineWidth(0.3);
+      doc.line(b.x, BAND_Y, b.x, BAND_Y + 8);
+      if (b.w > 4) {
+        doc.setTextColor(203, 213, 225); doc.setFontSize(6.5); doc.setFont('helvetica', 'bold');
+        doc.text(b.label, b.x + b.w / 2, BAND_Y + 5.5, { align: 'center', maxWidth: b.w - 2 });
+      }
     });
 
-    // Header row 2 — week labels
-    doc.setFillColor(248, 250, 252); doc.rect(TL_X, HDR1, TL_W_MM, HDR2 - HDR1, 'F');
-    doc.setFillColor(248, 250, 252); doc.rect(14, HDR1, LBL_W, HDR2 - HDR1, 'F');
-    doc.setTextColor(100, 116, 139); doc.setFontSize(5.5); doc.setFont('helvetica', 'normal');
-    // Column headers
-    doc.setTextColor(71, 85, 105); doc.setFontSize(6); doc.setFont('helvetica', 'bold');
-    doc.text('Task Subject', 16, HDR2 - 1);
+    // ── Week label row ──────────────────────────────────────────────────
+    doc.setFillColor(248, 250, 252);
+    doc.rect(ML, WEEK_Y, LBL_W + TL_W, 8, 'F');
+    doc.setDrawColor(203, 213, 225); doc.setLineWidth(0.3);
+    doc.line(ML, WEEK_Y, ML + LBL_W + TL_W, WEEK_Y); // top border
     weeks.forEach(wk => {
       if (wk.w > 3) {
         doc.setTextColor(100, 116, 139); doc.setFontSize(5.5); doc.setFont('helvetica', 'normal');
-        doc.text(`W${wk.wkNum}`, wk.x + wk.w / 2, HDR2 - 1, { align: 'center' });
+        doc.text(`W${wk.wkNum}`, wk.x + wk.w / 2, WEEK_Y + 5.5, { align: 'center' });
       }
-      doc.setDrawColor(226, 232, 240); doc.line(wk.x + wk.w, HDR1, wk.x + wk.w, DATA_Y + tasks.length * ROW_H);
+      doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.15);
+      doc.line(wk.x, WEEK_Y, wk.x, WEEK_Y + 8);
     });
+    // header bottom border
+    doc.setDrawColor(203, 213, 225); doc.setLineWidth(0.4);
+    doc.line(ML, HDR_BOT, ML + LBL_W + TL_W, HDR_BOT);
+    // vertical separator between label col and timeline
+    doc.setDrawColor(203, 213, 225); doc.setLineWidth(0.3);
+    doc.line(ML + LBL_W, BAND_Y, ML + LBL_W, dataEndY);
 
-    // Header bottom border
-    doc.setDrawColor(203, 213, 225); doc.setLineWidth(0.4); doc.line(14, HDR2, PW - 8, HDR2);
+    // ── Task rows ───────────────────────────────────────────────────────
+    pageTasks.forEach((t: any, i: number) => {
+      const y = HDR_BOT + i * ROW_H;
+      const globalIdx = startIdx + i;
 
-    // Task rows
-    tasks.forEach((t: any, i: number) => {
-      const y = DATA_Y + i * ROW_H;
-      const isEven = i % 2 === 0;
+      // alternating row bg
+      if (globalIdx % 2 !== 0) {
+        doc.setFillColor(248, 250, 252);
+        doc.rect(ML, y, LBL_W + TL_W, ROW_H, 'F');
+      }
 
-      // Row background
-      if (!isEven) { doc.setFillColor(248, 250, 252); doc.rect(14, y, PW - 22, ROW_H, 'F'); }
-
-      // Done checkbox + subject
+      // status dot + subject label
       const st = getStatus(t);
       const dotClr = stClr[st] || [107, 114, 128];
-      doc.setFillColor(...dotClr as [number, number, number]); doc.circle(17, y + ROW_H / 2, 1, 'F');
+      doc.setFillColor(...dotClr as [number, number, number]);
+      doc.circle(ML + 3, y + ROW_H / 2, 1, 'F');
       const isDone = !!t.actEnd;
       doc.setTextColor(isDone ? 148 : 30, isDone ? 163 : 41, isDone ? 184 : 59);
-      doc.setFontSize(6); doc.setFont('helvetica', 'normal');
-      const subj = t.subject.length > 42 ? t.subject.slice(0, 42) + '…' : t.subject;
-      doc.text(subj, 20, y + ROW_H / 2 + 1);
+      doc.setFontSize(5.5); doc.setFont('helvetica', 'normal');
+      const maxChars = 46;
+      const subj = t.subject.length > maxChars ? t.subject.slice(0, maxChars) + '…' : t.subject;
+      doc.text(subj, ML + 7, y + ROW_H / 2 + 1, { maxWidth: LBL_W - 9 });
 
-      // Plan bar (blue)
+      // plan bar
       if (t.planStart && t.planEnd) {
-        const bx = d2x(t.planStart), bw = Math.max(0.8, d2x(t.planEnd) - d2x(t.planStart));
-        doc.setFillColor(191, 219, 254); doc.roundedRect(bx, y + 1, bw, 2, 0.4, 0.4, 'F');
+        const bx = d2x(t.planStart);
+        const bw = Math.max(0.8, d2x(t.planEnd) - bx);
+        doc.setFillColor(191, 219, 254);
+        doc.roundedRect(bx, y + 1.5, bw, 2.2, 0.4, 0.4, 'F');
       }
-      // Actual bar (green/red)
+      // actual bar
       if (t.actStart) {
         const ae = t.actEnd || new Date().toISOString().slice(0, 10);
-        const bx = d2x(t.actStart), bw = Math.max(0.8, d2x(ae) - d2x(t.actStart));
+        const bx = d2x(t.actStart);
+        const bw = Math.max(0.8, d2x(ae) - bx);
         const bad = st === 'Delayed' || st === 'Overdue';
         doc.setFillColor(...(bad ? [252, 165, 165] : [167, 243, 208]) as [number, number, number]);
-        doc.roundedRect(bx, y + 3.5, bw, 2, 0.4, 0.4, 'F');
+        doc.roundedRect(bx, y + 4, bw, 2.2, 0.4, 0.4, 'F');
       }
 
-      // Row separator
-      doc.setDrawColor(241, 245, 249); doc.setLineWidth(0.2); doc.line(14, y + ROW_H, PW - 8, y + ROW_H);
+      // row divider
+      doc.setDrawColor(241, 245, 249); doc.setLineWidth(0.15);
+      doc.line(ML, y + ROW_H, ML + LBL_W + TL_W, y + ROW_H);
     });
 
-    // Today line
+    // ── Today line ──────────────────────────────────────────────────────
     const todayStr2 = new Date().toISOString().slice(0, 10);
     const tx = d2x(todayStr2);
-    if (tx >= TL_X && tx <= TL_X + TL_W_MM) {
+    if (tx >= TL_X && tx <= TL_X + TL_W) {
       doc.setDrawColor(239, 68, 68); doc.setLineWidth(0.5);
-      doc.line(tx, HDR1, tx, DATA_Y + tasks.length * ROW_H);
+      doc.line(tx, BAND_Y, tx, dataEndY);
     }
 
-    // Legend
-    const legY = DATA_Y + tasks.length * ROW_H + 5;
-    doc.setFontSize(6.5); doc.setFont('helvetica', 'normal');
-    [[191, 219, 254, 'Plan'], [167, 243, 208, 'Actual'], [252, 165, 165, 'Delayed']].forEach(([r, g, b, lbl], li) => {
-      const lx = 14 + li * 28;
-      doc.setFillColor(r as number, g as number, b as number); doc.roundedRect(lx, legY, 6, 3, 0.5, 0.5, 'F');
-      doc.setTextColor(71, 85, 105); doc.text(lbl as string, lx + 7.5, legY + 2.2);
+    // ── Legend ──────────────────────────────────────────────────────────
+    const legY = Math.min(dataEndY + 5, FOOTER_Y - 8);
+    ([[191, 219, 254, 'Plan'], [167, 243, 208, 'Actual'], [252, 165, 165, 'Delayed'], [239, 68, 68, 'Today']] as any[]).forEach(([r, g, b, lbl]: any, li: number) => {
+      const lx = ML + li * 32;
+      doc.setFillColor(r, g, b); doc.roundedRect(lx, legY, 7, 3.5, 0.5, 0.5, 'F');
+      doc.setTextColor(71, 85, 105); doc.setFontSize(6.5); doc.setFont('helvetica', 'normal');
+      doc.text(lbl, lx + 9, legY + 2.5);
     });
-    doc.setFillColor(239, 68, 68); doc.roundedRect(14 + 3 * 28, legY, 6, 3, 0.5, 0.5, 'F');
-    doc.setTextColor(71, 85, 105); doc.text('Today', 14 + 3 * 28 + 7.5, legY + 2.2);
+  };
+
+  // Split tasks into pages if needed
+  const ganttPages = Math.ceil(tasks.length / ROWS_PER_PAGE) || 1;
+  for (let pg = 0; pg < ganttPages; pg++) {
+    const slice = tasks.slice(pg * ROWS_PER_PAGE, (pg + 1) * ROWS_PER_PAGE);
+    drawGanttPage(slice, pg * ROWS_PER_PAGE, ganttPages, pg + 1);
   }
 
   // ── Footer on all pages ───────────────────────────────────────────────
