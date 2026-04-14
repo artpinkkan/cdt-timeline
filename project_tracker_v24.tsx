@@ -2,8 +2,8 @@ import { useState, useRef, useEffect } from "react";
 
 const TODAY = new Date(); TODAY.setHours(0,0,0,0);
 const todayStr = `${TODAY.getFullYear()}-${String(TODAY.getMonth()+1).padStart(2,'0')}-${String(TODAY.getDate()).padStart(2,'0')}`;
-const TL_S=new Date('2024-06-01'),TL_E=new Date('2026-05-31'),TL_DAYS=(TL_E-TL_S)/864e5,TL_W=1920;
-const MONTHS=Array.from({length:24},(_,i)=>{const d=new Date(2024,5+i,1);return{label:d.toLocaleString('en-US',{month:'short'})+" '"+String(d.getFullYear()).slice(2),x:Math.round(i*TL_W/24),w:Math.round(TL_W/24)};});
+const TL_S=new Date('2026-01-01'),TL_E=new Date('2027-12-31'),TL_DAYS=(TL_E-TL_S)/864e5,TL_W=1920;
+const MONTHS=Array.from({length:24},(_,i)=>{const d=new Date(2026,i,1);return{label:d.toLocaleString('en-US',{month:'short'})+" '"+String(d.getFullYear()).slice(2),x:Math.round(i*TL_W/24),w:Math.round(TL_W/24)};});
 const d2x=ds=>ds?Math.round(((new Date(ds)-TL_S)/864e5/TL_DAYS)*TL_W):null;
 const fmt=ds=>ds?new Date(ds).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'2-digit'}):'–';
 const getStatus=t=>{if(t.done)return(t.actEnd&&t.planEnd&&new Date(t.actEnd)>new Date(t.planEnd))?'Delayed':'Done';if(t.planEnd&&TODAY>new Date(t.planEnd))return'Overdue';if(t.actStart)return'In Progress';return'Planned';};
@@ -11,24 +11,30 @@ const SC={Done:{bg:'#D1FAE5',tx:'#065F46',dot:'#10B981'},Delayed:{bg:'#FEE2E2',t
 const PROJ_COLORS=['#3B82F6','#10B981','#8B5CF6','#F59E0B','#EF4444','#06B6D4','#EC4899','#14B8A6'];
 
 const SEED={
-  projects:[{id:1,name:'Regulatory Information Management',irCode:'IR-CRA-2025-001',description:'Kalbe RIM system implementation',color:'#3B82F6',createdAt:'2024-01-15'}],
-  projectTasks:{1:[
-    {id:1,subject:'Initiative Request & Approval',planStart:'2024-06-03',planEnd:'2024-07-12',actStart:'2024-06-03',actEnd:'2024-07-15',pic:'Team A',done:true},
-    {id:2,subject:'URS Preparation & Sign-off',planStart:'2024-07-15',planEnd:'2024-09-13',actStart:'2024-07-22',actEnd:'2024-09-20',pic:'Team B',done:true},
-    {id:3,subject:'System Architecture & Design',planStart:'2024-09-02',planEnd:'2024-10-11',actStart:'2024-09-09',actEnd:'2024-10-18',pic:'Team C',done:true},
-    {id:4,subject:'Backend Development',planStart:'2024-10-14',planEnd:'2025-01-17',actStart:'2024-10-21',actEnd:'2025-01-24',pic:'Dev Team',done:true},
-    {id:5,subject:'Frontend Development',planStart:'2024-11-01',planEnd:'2025-02-28',actStart:'2024-11-15',actEnd:null,pic:'UI Team',done:false},
-    {id:6,subject:'Integration Testing',planStart:'2025-01-20',planEnd:'2025-03-15',actStart:'2025-02-01',actEnd:null,pic:'QA Team',done:false},
-    {id:7,subject:'User Acceptance Testing',planStart:'2025-03-01',planEnd:'2025-04-30',actStart:null,actEnd:null,pic:'Business',done:false},
-    {id:8,subject:'Training & Documentation',planStart:'2025-03-15',planEnd:'2025-05-15',actStart:null,actEnd:null,pic:'Training',done:false},
-    {id:9,subject:'Go Live Preparation',planStart:'2025-04-15',planEnd:'2025-05-31',actStart:null,actEnd:null,pic:'PM',done:false},
-    {id:10,subject:'System Integration',planStart:'2025-05-01',planEnd:'2025-07-31',actStart:null,actEnd:null,pic:'Dev Ops',done:false},
-    {id:11,subject:'Performance Optimization',planStart:'2025-06-01',planEnd:'2025-08-31',actStart:null,actEnd:null,pic:'Dev Team',done:false},
-    {id:12,subject:'Security Audit',planStart:'2025-07-01',planEnd:'2025-09-30',actStart:null,actEnd:null,pic:'Security',done:false},
-    {id:13,subject:'Production Deployment',planStart:'2025-09-01',planEnd:'2025-10-31',actStart:null,actEnd:null,pic:'DevOps',done:false},
-    {id:14,subject:'Post-Launch Review',planStart:'2025-10-01',planEnd:'2025-12-31',actStart:null,actEnd:null,pic:'PM',done:false},
-  ]},
-  npid:2,ntid:15
+  projects:[
+    {id:1, name:'Support AI Digital Literacy',       irCode:'', description:'Kalbe Digital University (10%) · Target: 100',              color:'#3B82F6', createdAt:'2026-01-01'},
+    {id:2, name:'Conduct Tech Session / Workshop',   irCode:'', description:'Kalbe Digital University (10%) · Target: 2',                color:'#3B82F6', createdAt:'2026-01-01'},
+    {id:3, name:'Elvasoft AI v1.0',                  irCode:'', description:'VisionX (20%) · System Improvement Q3',                    color:'#8B5CF6', createdAt:'2026-01-01'},
+    {id:4, name:'Elvasoft PACS v2.0',                irCode:'', description:'VisionX (20%) · System Improvement Q3',                    color:'#8B5CF6', createdAt:'2026-01-01'},
+    {id:5, name:'VisionX 3.0 Patent Filing',         irCode:'', description:'VisionX (20%) · Target: 1 Patent',                         color:'#8B5CF6', createdAt:'2026-01-01'},
+    {id:6, name:'BioLLM Bioinformatics',             irCode:'', description:'GeneX (20%) · Go Live Q1 · System Improvement Q3',         color:'#10B981', createdAt:'2026-01-01'},
+    {id:7, name:'Kalbe DevStreams (KSF v2.0)',        irCode:'', description:'Platform (30%) · System Improvement Q3',                   color:'#F59E0B', createdAt:'2026-01-01'},
+    {id:8, name:'Kalbe SimTwin Platform v1.0',       irCode:'', description:'Platform (30%) · Go Live Q1 · System Improvement Q3',      color:'#F59E0B', createdAt:'2026-01-01'},
+    {id:9, name:'OneKalbe Unified IoT Platform',     irCode:'', description:'Platform (30%) · Go Live Q1 · System Improvement Q4',      color:'#F59E0B', createdAt:'2026-01-01'},
+    {id:10,name:'Product Innovation Platform v1.0',  irCode:'', description:'Platform (30%) · Go Live Q1 · System Improvement Q3',      color:'#F59E0B', createdAt:'2026-01-01'},
+    {id:11,name:'Kalbe GPT Platform',                irCode:'', description:'Platform (30%) · Go Live Q2 · System Improvement Q4',      color:'#F59E0B', createdAt:'2026-01-01'},
+    {id:12,name:'Kalbe Robotic Platform',            irCode:'', description:'Platform (30%) · Go Live Q3',                              color:'#F59E0B', createdAt:'2026-01-01'},
+    {id:13,name:'Software + AIoRT Patent Filing',    irCode:'', description:'Platform (30%) · Target: 1 Patent',                        color:'#F59E0B', createdAt:'2026-01-01'},
+    {id:14,name:'eWS Deployment Support',            irCode:'', description:'ChainX (20%) · Target: 1',                                 color:'#EF4444', createdAt:'2026-01-01'},
+    {id:15,name:'Homogenous Mixing DEM',             irCode:'', description:'ChainX (20%) · Go Live Q1 · System Improvement Q3',        color:'#EF4444', createdAt:'2026-01-01'},
+    {id:16,name:'KMS Kalbe Pharma R&D',              irCode:'', description:'ChainX (20%) · Go Live Q2 · System Improvement Q4',        color:'#EF4444', createdAt:'2026-01-01'},
+    {id:17,name:'SCM Digital Twin',                  irCode:'', description:'ChainX (20%) · Go Live Q2 · System Improvement Q4',        color:'#EF4444', createdAt:'2026-01-01'},
+    {id:18,name:'E-Laboratory Notebook',             irCode:'', description:'ChainX (20%) · Go Live Q2 · System Improvement Q4',        color:'#EF4444', createdAt:'2026-01-01'},
+    {id:19,name:'Kalbe RIM',                         irCode:'', description:'ChainX (20%) · Go Live Q2 · System Improvement Q4',        color:'#EF4444', createdAt:'2026-01-01'},
+    {id:20,name:'Shelf Life Estimation',             irCode:'', description:'ChainX (20%) · Go Live Q2 · System Improvement Q4',        color:'#EF4444', createdAt:'2026-01-01'},
+  ],
+  projectTasks:{1:[],2:[],3:[],4:[],5:[],6:[],7:[],8:[],9:[],10:[],11:[],12:[],13:[],14:[],15:[],16:[],17:[],18:[],19:[],20:[]},
+  npid:21,ntid:1
 };
 
 // ── PDF Export ────────────────────────────────────────────────────────
@@ -78,9 +84,72 @@ async function exportProjectPDF(project, tasks) {
 
   // Footer
   const pages=doc.internal.getNumberOfPages();
-  for(let i=1;i<=pages;i++){doc.setPage(i);doc.setFontSize(7);doc.setTextColor(148,163,184);doc.text(`${project.name} — Page ${i} of ${pages}`,14,doc.internal.pageSize.height-6);doc.text('Generated by RIM Tracker',297-14,doc.internal.pageSize.height-6,{align:'right'});}
+  for(let i=1;i<=pages;i++){doc.setPage(i);doc.setFontSize(7);doc.setTextColor(148,163,184);doc.text(`${project.name} — Page ${i} of ${pages}`,14,doc.internal.pageSize.height-6);doc.text('Generated by FinalPush',297-14,doc.internal.pageSize.height-6,{align:'right'});}
 
   doc.save(`${project.name.replace(/[^a-z0-9]/gi,'_')}_report.pdf`);
+}
+
+async function exportAllPDF(projects, projectTasks) {
+  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js');
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+
+  const allTasks=Object.values(projectTasks).flat();
+  const totalDone=allTasks.filter(t=>t.done).length;
+  const overallPct=allTasks.length?Math.round(totalDone/allTasks.length*100):0;
+
+  // Header
+  doc.setFillColor(15,23,42);doc.rect(0,0,297,32,'F');
+  doc.setTextColor(255,255,255);doc.setFontSize(15);doc.setFont('helvetica','bold');
+  doc.text('FinalPush.io — All Projects Report',14,13);
+  doc.setFontSize(8.5);doc.setFont('helvetica','normal');
+  doc.text(`Generated: ${new Date().toLocaleDateString('en-GB')}   |   ${projects.length} projects   |   ${totalDone}/${allTasks.length} tasks done (${overallPct}%)`,14,23);
+
+  // KPI boxes
+  [{l:'Total Projects',v:String(projects.length)},{l:'Total Tasks',v:String(allTasks.length)},{l:'Tasks Done',v:String(totalDone)},{l:'Overall Progress',v:`${overallPct}%`}]
+    .forEach(({l,v},i)=>{
+      const kx=14+i*64;
+      doc.setFillColor(241,245,249);doc.roundedRect(kx,36,60,18,2,2,'F');
+      doc.setTextColor(148,163,184);doc.setFontSize(7);doc.text(l.toUpperCase(),kx+4,42);
+      doc.setTextColor(15,23,42);doc.setFontSize(13);doc.setFont('helvetica','bold');doc.text(v,kx+4,51);
+      doc.setFont('helvetica','normal');
+    });
+
+  // Group headers + rows
+  const catColors={
+    'Kalbe Digital University':'#3B82F6','VisionX':'#8B5CF6','GeneX':'#10B981',
+    'Platform':'#F59E0B','ChainX':'#EF4444'
+  };
+  const getCategory=desc=>{
+    for(const k of Object.keys(catColors)){if((desc||'').includes(k))return k;}
+    return 'Other';
+  };
+
+  doc.autoTable({
+    startY:60,
+    head:[['#','Project Name','Category / Description','Tasks','Done','Progress']],
+    body:projects.map((p,i)=>{
+      const pt=projectTasks[p.id]||[];
+      const dn=pt.filter(t=>t.done).length;
+      const pct=pt.length?Math.round(dn/pt.length*100):0;
+      return[i+1,p.name,p.description||'–',pt.length,dn,`${pct}%`];
+    }),
+    headStyles:{fillColor:[30,41,59],textColor:255,fontSize:8,fontStyle:'bold'},
+    bodyStyles:{fontSize:7.5,textColor:[30,41,59]},
+    alternateRowStyles:{fillColor:[248,250,252]},
+    columnStyles:{0:{cellWidth:10},2:{cellWidth:90},3:{cellWidth:16,halign:'center'},4:{cellWidth:16,halign:'center'},5:{cellWidth:22,halign:'center'}},
+    margin:{left:14,right:14},
+  });
+
+  // Footer
+  const pages=doc.internal.getNumberOfPages();
+  for(let i=1;i<=pages;i++){
+    doc.setPage(i);doc.setFontSize(7);doc.setTextColor(148,163,184);
+    doc.text(`FinalPush.io — Page ${i} of ${pages}`,14,doc.internal.pageSize.height-6);
+    doc.text('Generated by FinalPush.io',297-14,doc.internal.pageSize.height-6,{align:'right'});
+  }
+  doc.save('FinalPush_All_Projects.pdf');
 }
 
 // ── App ──────────────────────────────────────────────────────────────
@@ -92,8 +161,8 @@ export default function App(){
   const [projModal,setProjModal]=useState(null);
   const gRef=useRef();
 
-  useEffect(()=>{(async()=>{try{const r=await window.storage.get('aps3');if(r)setS(JSON.parse(r.value));}catch{}})();},[]);
-  const persist=ns=>{setS(ns);window.storage.set('aps3',JSON.stringify(ns)).catch(()=>{});};
+  useEffect(()=>{(async()=>{try{const r=await window.storage.get('v18');if(r)setS(JSON.parse(r.value));}catch{}})();},[]);
+  const persist=ns=>{setS(ns);window.storage.set('v18',JSON.stringify(ns)).catch(()=>{});};
 
   const proj=s.projects.find(p=>p.id===activeId)||null;
   const tasks=activeId?(s.projectTasks[activeId]||[]):[];
@@ -146,7 +215,7 @@ function Sidebar({projects,projectTasks,activeId,onDashboard,onSelect,onNew}){
       <div style={{padding:'18px 16px',borderBottom:'1px solid #1E293B'}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <div style={{width:34,height:34,borderRadius:9,background:'#3B82F6',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,fontWeight:700,color:'#fff',flexShrink:0}}>R</div>
-          <div><div style={{color:'#F1F5F9',fontWeight:700,fontSize:14,lineHeight:1.2}}>RIM Tracker</div><div style={{color:'#475569',fontSize:11}}>Project Manager</div></div>
+          <div><div style={{color:'#F1F5F9',fontWeight:700,fontSize:14,lineHeight:1.2}}>FinalPush.io</div><div style={{color:'#475569',fontSize:11}}>Project Manager</div></div>
         </div>
       </div>
       <div style={{flex:1,padding:'12px 8px',overflowY:'auto'}}>
@@ -190,13 +259,20 @@ function Sidebar({projects,projectTasks,activeId,onDashboard,onSelect,onNew}){
 
 // ── Dashboard ────────────────────────────────────────────────────────
 function Dashboard({projects,projectTasks,onSelect,onNew,onEdit,onDelete}){
+  const [exporting,setExporting]=useState(false);
+  const handleExportAll=async()=>{setExporting(true);try{await exportAllPDF(projects,projectTasks);}catch(e){console.error(e);}setExporting(false);};
   const allTasks=Object.values(projectTasks).flat();
   const statSummary=['Done','In Progress','Overdue','Planned'].map(s=>({s,n:allTasks.filter(t=>getStatus(t)===s).length}));
   return(
     <div style={{padding:24}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:20}}>
         <div><h1 style={{margin:0,fontSize:22,fontWeight:700,color:'#0F172A'}}>Projects</h1><p style={{margin:'4px 0 0',color:'#64748B',fontSize:13}}>{projects.length} project{projects.length!==1?'s':''} · {allTasks.length} total tasks</p></div>
-        <button onClick={onNew} style={{background:'#3B82F6',color:'#fff',border:'none',borderRadius:8,padding:'9px 18px',cursor:'pointer',fontWeight:700,fontSize:13}}>+ New Project</button>
+        <div style={{display:'flex',gap:8}}>
+          <button onClick={handleExportAll} disabled={exporting} style={{background:exporting?'#F1F5F9':'#fff',border:'1px solid #E2E8F0',borderRadius:8,padding:'9px 16px',cursor:exporting?'default':'pointer',color:exporting?'#94A3B8':'#475569',fontSize:13,display:'flex',alignItems:'center',gap:6}}>
+            {exporting?'Exporting…':'⬇ Export PDF'}
+          </button>
+          <button onClick={onNew} style={{background:'#3B82F6',color:'#fff',border:'none',borderRadius:8,padding:'9px 18px',cursor:'pointer',fontWeight:700,fontSize:13}}>+ New Project</button>
+        </div>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:24}}>
         {statSummary.map(({s,n})=>(
@@ -231,7 +307,7 @@ function Dashboard({projects,projectTasks,onSelect,onNew,onEdit,onDelete}){
                     </div>
                     <div style={{display:'flex',gap:4}} onClick={e=>e.stopPropagation()}>
                       <button onClick={()=>onEdit(p)} style={{background:'#F8FAFC',color:'#64748B',border:'1px solid #E2E8F0',borderRadius:6,padding:'4px 8px',cursor:'pointer',fontSize:11}}>Edit</button>
-                      <button onClick={()=>{if(confirm(`Delete "${p.name}"?`))onDelete(p.id);}} style={{background:'#FEF2F2',color:'#EF4444',border:'none',borderRadius:6,padding:'4px 8px',cursor:'pointer',fontSize:11}}>Del</button>
+                      <button onClick={()=>{onDelete(p.id);}} style={{background:'#FEF2F2',color:'#EF4444',border:'none',borderRadius:6,padding:'4px 8px',cursor:'pointer',fontSize:11}}>Del</button>
                     </div>
                   </div>
                   {p.description&&<div style={{fontSize:12,color:'#64748B',marginBottom:12,lineHeight:1.4}}>{p.description}</div>}
@@ -397,7 +473,7 @@ function GanttView({tasks,txDay,gRef,onEdit,onDel,onTog}){
         </div>
       </div>
       <div style={{borderTop:'1px solid #F1F5F9',padding:'7px 16px',display:'flex',justifyContent:'flex-end',background:'#FAFAFA'}}>
-        <span style={{fontSize:11,color:'#94A3B8'}}>Project Timeline · {tasks.length} tasks · 01 Jun '24 – 31 May '26</span>
+        <span style={{fontSize:11,color:'#94A3B8'}}>Project Timeline · {tasks.length} tasks · Jan '26 – Dec '27</span>
       </div>
     </div>
   );
@@ -524,8 +600,7 @@ function TaskModal({task,onSave,onClose}){
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
           <div style={{gridColumn:'1/-1'}}><label style={lb}>Task Subject *</label><input value={f.subject} onChange={e=>upd('subject',e.target.value)} placeholder="Enter task name..." style={fi}/></div>
 
-          <div><label style={lb}>PIC</label><input value={f.pic||''} onChange={e=>upd('pic',e.target.value)} placeholder="Person in Charge" style={fi}/></div>
-          <div style={{display:'flex',alignItems:'center',gap:10,paddingTop:22}}>
+<div style={{display:'flex',alignItems:'center',gap:10,paddingTop:22}}>
             <div onClick={()=>upd('done',!f.done)} style={{width:22,height:22,borderRadius:6,border:`2px solid ${f.done?'#10B981':'#CBD5E1'}`,background:f.done?'#10B981':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0,transition:'all 0.15s'}}>
               {f.done&&<span style={{color:'#fff',fontSize:14,fontWeight:700,lineHeight:1}}>✓</span>}
             </div>

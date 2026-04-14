@@ -1,0 +1,19 @@
+{
+  "name": "cdt-timeline",
+  "version": "1.0.0",
+  "description": "CDT Timeline - Project Tracker Application",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
+    "build": "npm run build --prefix server && npm run build --prefix client",
+    "start": "npm run start --prefix server",
+    "client:dev": "npm run dev --prefix client",
+    "server:dev": "npm run dev --prefix server"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
