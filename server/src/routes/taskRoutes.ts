@@ -65,8 +65,12 @@ router.post('/projects/:projectId/tasks', requireAuth, async (req: AuthRequest, 
       [projectId, subject, planStart || null, planEnd || null, actStart || null, actEnd || null, pic || null, done ? 1 : 0, 0]
     );
 
-    const task = await db.get('SELECT * FROM tasks WHERE id = ?', [result.lastID]);
-    res.status(201).json(norm(task));
+    res.status(201).json(norm({
+      id: result.lastID, project_id: projectId, subject,
+      plan_start: planStart || null, plan_end: planEnd || null,
+      act_start: actStart || null, act_end: actEnd || null,
+      pic: pic || null, done: done ? 1 : 0, sort_order: 0,
+    }));
   } catch (error) {
     console.error('Create task error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -100,8 +104,12 @@ router.put('/projects/:projectId/tasks/:taskId', requireAuth, async (req: AuthRe
       [subject, planStart || null, planEnd || null, actStart || null, actEnd || null, pic || null, done ? 1 : 0, taskId]
     );
 
-    const updated = await db.get('SELECT * FROM tasks WHERE id = ?', [taskId]);
-    res.json(norm(updated));
+    res.json(norm({
+      id: taskId, project_id: projectId, subject,
+      plan_start: planStart || null, plan_end: planEnd || null,
+      act_start: actStart || null, act_end: actEnd || null,
+      pic: pic || null, done: done ? 1 : 0, sort_order: task.sort_order,
+    }));
   } catch (error) {
     console.error('Update task error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -141,8 +149,15 @@ router.patch('/projects/:projectId/tasks/reorder', requireAuth, async (req: Auth
     const project = await verifyProjectOwnership(projectId, req.userId!);
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
-    for (let i = 0; i < order.length; i++) {
-      await db.run('UPDATE tasks SET sort_order = ? WHERE id = ? AND project_id = ?', [i, order[i], projectId]);
+    if (order.length > 0) {
+      const cases = order.map((_: any, i: number) => `WHEN ? THEN ?`).join(' ');
+      const params: any[] = [];
+      order.forEach((id: number, i: number) => { params.push(id, i); });
+      params.push(projectId);
+      await db.run(
+        `UPDATE tasks SET sort_order = CASE id ${cases} END WHERE project_id = ?`,
+        params
+      );
     }
     res.json({ ok: true });
   } catch (error) {
@@ -169,9 +184,7 @@ router.patch('/projects/:projectId/tasks/:taskId/toggle', requireAuth, async (re
 
     const newDone = task.done ? 0 : 1;
     await db.run('UPDATE tasks SET done = ? WHERE id = ?', [newDone, taskId]);
-
-    const updated = await db.get('SELECT * FROM tasks WHERE id = ?', [taskId]);
-    res.json(norm(updated));
+    res.json(norm({ ...task, done: newDone }));
   } catch (error) {
     console.error('Toggle task error:', error);
     res.status(500).json({ error: 'Internal server error' });

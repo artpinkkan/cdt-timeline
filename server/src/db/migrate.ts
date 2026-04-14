@@ -41,6 +41,13 @@ export async function migrate() {
   try { await db.run('ALTER TABLE projects ADD COLUMN plan_start TEXT'); } catch {}
   try { await db.run('ALTER TABLE projects ADD COLUMN plan_end TEXT'); } catch {}
 
+  // Create indexes for common query patterns (idempotent)
+  await db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id);
+    CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
+    CREATE INDEX IF NOT EXISTS idx_tasks_sort_order  ON tasks(project_id, sort_order);
+  `);
+
   // Check if admin user already exists
   const adminUser = await db.get('SELECT * FROM users WHERE username = ?', [process.env.ADMIN_USER || 'admin']);
 

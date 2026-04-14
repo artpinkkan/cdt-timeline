@@ -26,9 +26,15 @@ router.post('/login', async (req: any, res) => {
       return res.status(401).json({ error: 'Invalid username or password' });
     }
 
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret && process.env.NODE_ENV === 'production') {
+      console.error('FATAL: JWT_SECRET env var is not set in production');
+      return res.status(500).json({ error: 'Server misconfiguration' });
+    }
+
     const token = jwt.sign(
       { userId: user.id, username: user.username },
-      process.env.JWT_SECRET || 'dev-secret',
+      jwtSecret || 'dev-secret',
       { expiresIn: '7d' }
     );
 

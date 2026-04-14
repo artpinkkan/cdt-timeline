@@ -57,11 +57,21 @@ const T = {
   } as React.CSSProperties,
 };
 
-const getStatus = (t: any) => {
+const getStatus = (t: any): string => {
   if (t.actEnd) return t.planEnd && new Date(t.actEnd) > new Date(t.planEnd) ? 'Delayed' : 'Done';
   if (t.planEnd && TODAY > new Date(t.planEnd)) return 'Overdue';
   if (t.actStart) return 'In Progress';
   return 'Planned';
+};
+
+// Month boundaries for MTD — computed once at module level (constant per session)
+const _MTD_MONTH = TODAY.getMonth(), _MTD_YEAR = TODAY.getFullYear();
+const _MONTH_START = new Date(_MTD_YEAR, _MTD_MONTH, 1);
+const _MONTH_END   = new Date(_MTD_YEAR, _MTD_MONTH + 1, 0);
+const overlapsThisMonth = (t: any) =>
+  !!t.planStart && !!t.planEnd &&
+  new Date(t.planStart) <= _MONTH_END &&
+  new Date(t.planEnd)   >= _MONTH_START;
 };
 
 const fmt = (ds: string) => (ds ? new Date(ds).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '–');
@@ -496,15 +506,7 @@ export default function App() {
   const ach = tgt > 0 ? (act / tgt) * 100 : act > 0 ? 100 : 0;
   // Plan Completion from project-level plan_end (editable via Edit Project modal)
   const pc = proj?.plan_end ? new Date(proj.plan_end).toLocaleString('en-US', { month: 'short', year: 'numeric' }) : '–';
-  // % MTD = tasks planned to be active this month (plan overlaps current month) vs those actually started/done
-  const thisMonth = TODAY.getMonth(), thisYear = TODAY.getFullYear();
-  const monthStart = new Date(thisYear, thisMonth, 1);
-  const monthEnd   = new Date(thisYear, thisMonth + 1, 0); // last day of month
-  const overlapsThisMonth = (t: any) => {
-    if (!t.planStart || !t.planEnd) return false;
-    const ps = new Date(t.planStart), pe = new Date(t.planEnd);
-    return ps <= monthEnd && pe >= monthStart;
-  };
+  // % MTD = tasks whose plan overlaps the current month vs those actually started/done
   const mtdTargetTasks = tasks.filter(overlapsThisMonth);
   const mtdTarget = mtdTargetTasks.length;
   const mtdActual = mtdTargetTasks.filter((t: any) => t.actStart || t.actEnd).length;
@@ -659,7 +661,9 @@ function Sidebar({ projects, projectTasks, activeId, user, logout, onDashboard, 
 function Dashboard({ projects, projectTasks, onSelect, onNew, onEdit, onDelete }: any) {
   const [exporting, setExporting] = useState(false);
   const allTasks = Object.values(projectTasks).flat() as any[];
-  const statSummary = ['Done', 'In Progress', 'Overdue', 'Planned'].map((s) => ({ s, n: allTasks.filter((t) => getStatus(t) === s).length }));
+  const _statusCounts: Record<string, number> = { Done: 0, 'In Progress': 0, Overdue: 0, Planned: 0 };
+  allTasks.forEach((t) => { const s = getStatus(t); if (s in _statusCounts) _statusCounts[s]++; });
+  const statSummary = Object.entries(_statusCounts).map(([s, n]) => ({ s, n }));
 
   return (
     <div style={{ padding: 28 }}>
@@ -822,6 +826,7 @@ function ProjectPage({ project, tasks, view, setView, gRef, todayX, kpis, onAdd,
             .then(doc => {
               const url = URL.createObjectURL(doc.output('blob'));
               window.open(url, '_blank');
+              setTimeout(() => URL.revokeObjectURL(url), 10000);
             })
             .catch(console.error)
             .finally(() => setExporting(false));
@@ -986,7 +991,7 @@ function GanttView({ tasks, todayX, gRef, onEdit, onDel, onReorder }: any) {
             {tasks.map((t: any, i: number) => {
               const px1 = d2x(t.planStart), px2 = d2x(t.planEnd);
               const ax1 = d2x(t.actStart), ax2 = t.actEnd ? d2x(t.actEnd) : (t.actStart ? d2x(todayStr) : null);
-              const bad = getStatus(t) === 'Delayed' || getStatus(t) === 'Overdue';
+              const _st = getStatus(t); const bad = _st === 'Delayed' || _st === 'Overdue';
               const isDragging = dragId === t.id;
               const isDragOver = dragOverId === t.id && dragId !== t.id;
               return (

@@ -52,8 +52,12 @@ router.post('/projects', requireAuth, async (req: AuthRequest, res) => {
       [req.userId, name, irCode || null, description || null, color || '#3B82F6', planStart || null, planEnd || null, now]
     );
 
-    const project = await db.get('SELECT * FROM projects WHERE id = ?', [result.lastID]);
-    res.status(201).json(project);
+    res.status(201).json({
+      id: result.lastID, user_id: req.userId, name,
+      ir_code: irCode || null, description: description || null,
+      color: color || '#3B82F6', plan_start: planStart || null,
+      plan_end: planEnd || null, created_at: now,
+    });
   } catch (error) {
     console.error('Create project error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -80,8 +84,11 @@ router.put('/projects/:id', requireAuth, async (req: AuthRequest, res) => {
       [name, irCode || null, description || null, color || '#3B82F6', planStart || null, planEnd || null, projectId]
     );
 
-    const updated = await db.get('SELECT * FROM projects WHERE id = ?', [projectId]);
-    res.json(updated);
+    res.json({
+      ...project,
+      name, ir_code: irCode || null, description: description || null,
+      color: color || '#3B82F6', plan_start: planStart || null, plan_end: planEnd || null,
+    });
   } catch (error) {
     console.error('Update project error:', error);
     res.status(500).json({ error: 'Internal server error' });
