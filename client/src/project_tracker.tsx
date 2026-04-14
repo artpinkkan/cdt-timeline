@@ -1,6 +1,22 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, Component } from 'react';
 import { projectsApi, tasksApi } from './api/client';
 import { useAuth } from './auth/AuthContext';
+
+class ErrorBoundary extends Component<{ children: any }, { error: any }> {
+  constructor(props: any) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error: any) { return { error }; }
+  render() {
+    if (this.state.error) return (
+      <div style={{ padding: 40, fontFamily: 'monospace', color: '#EF4444', background: '#FEF2F2', minHeight: '100vh' }}>
+        <h2 style={{ marginBottom: 12 }}>⚠ Render Error</h2>
+        <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{String(this.state.error?.message || this.state.error)}</pre>
+        <pre style={{ whiteSpace: 'pre-wrap', fontSize: 11, color: '#6B7280', marginTop: 12 }}>{this.state.error?.stack}</pre>
+        <button onClick={() => this.setState({ error: null })} style={{ marginTop: 20, padding: '8px 16px', background: '#EF4444', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Dismiss</button>
+      </div>
+    );
+    return this.props.children;
+  }
+}
 
 const TODAY = new Date();
 TODAY.setHours(0, 0, 0, 0);
@@ -376,7 +392,7 @@ async function exportAllPDF(projects: any[], projectTasks: Record<number, any[]>
 }
 
 // ── App ───────────────────────────────────────────────────────────────
-export default function App() {
+function AppInner() {
   const { user, logout } = useAuth();
   const [projects, setProjects] = useState<any[]>([]);
   const [projectTasks, setProjectTasks] = useState<Record<number, any[]>>({});
@@ -851,6 +867,10 @@ function ProjectPage({ project, tasks, view, setView, gRef, todayX, kpis, onAdd,
 
     </div>
   );
+}
+
+export default function App() {
+  return <ErrorBoundary><AppInner /></ErrorBoundary>;
 }
 
 // ── Gantt ─────────────────────────────────────────────────────────────
