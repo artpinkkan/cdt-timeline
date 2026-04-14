@@ -426,8 +426,8 @@ export default function App() {
     try {
       let nextProjects: any[];
       if (p.id) {
-        await projectsApi.update(p.id, p);
-        nextProjects = projects.map((x) => (x.id === p.id ? p : x));
+        const updated = await projectsApi.update(p.id, p); // use server response (snake_case fields)
+        nextProjects = projects.map((x) => (x.id === p.id ? updated : x));
       } else {
         const c = await projectsApi.create(p);
         nextProjects = [...projects, c];
@@ -481,15 +481,21 @@ export default function App() {
   };
 
   const N = tasks.length;
-  // % Target YTD  = tasks whose plan end date has passed (were supposed to be done by today)
-  const pDue = tasks.filter((t: any) => t.planEnd && new Date(t.planEnd) <= TODAY).length;
-  // % Actual YTD = tasks with actEnd set (and actEnd ≤ today)
-  const actDone = tasks.filter((t: any) => t.actEnd && new Date(t.actEnd) <= TODAY).length;
-  const tgt = N ? (pDue / N) * 100 : 0;
+  // % Target YTD = time elapsed through the project's planned span (linear)
+  const projStart = proj?.plan_start ? new Date(proj.plan_start) : null;
+  const projEnd   = proj?.plan_end   ? new Date(proj.plan_end)   : null;
+  let tgt = 0;
+  if (projStart && projEnd && projEnd > projStart) {
+    if (TODAY < projStart) tgt = 0;
+    else if (TODAY >= projEnd) tgt = 100;
+    else tgt = ((TODAY.getTime() - projStart.getTime()) / (projEnd.getTime() - projStart.getTime())) * 100;
+  }
+  // % Actual YTD = tasks with actEnd set (completed, regardless of date)
+  const actDone = tasks.filter((t: any) => !!t.actEnd).length;
   const act = N ? (actDone / N) * 100 : 0;
-  const ach = tgt > 0 ? (act / tgt) * 100 : 0;
-  const maxPEnd = tasks.reduce((m: Date, t: any) => { const d = t.planEnd ? new Date(t.planEnd) : null; return d && d > m ? d : m; }, new Date(0));
-  const pc = maxPEnd > new Date(0) ? maxPEnd.toLocaleString('en-US', { month: 'short', year: 'numeric' }) : '–';
+  const ach = tgt > 0 ? (act / tgt) * 100 : act > 0 ? 100 : 0;
+  // Plan Completion from project-level plan_end (editable via Edit Project modal)
+  const pc = proj?.plan_end ? new Date(proj.plan_end).toLocaleString('en-US', { month: 'short', year: 'numeric' }) : '–';
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: T.bg, fontFamily: 'system-ui,sans-serif' }}>
@@ -521,7 +527,6 @@ export default function App() {
                 { l: '% Actual YTD',      v: `${act.toFixed(1)}%`, sub: `${actDone}/${N} tasks`, c: '#10B981' },
                 { l: '% Achievement YTD', v: `${ach.toFixed(1)}%`, sub: 'Actual ÷ Target', c: ach < 80 ? '#EF4444' : '#10B981' },
                 { l: 'Plan Completion',   v: pc, sub: 'Projected end', c: '#F59E0B' },
-                { l: '% BE Achievement',  v: `${act.toFixed(1)}%`, sub: 'BE target: 100%', c: '#8B5CF6' },
               ]}
               onAdd={() => setTaskModal('add')} onEditTask={setTaskModal} onDelTask={delTask} onReorderTasks={reorderTasks}
               onEditProject={() => setProjModal(proj)}
