@@ -44,32 +44,6 @@ Dates must fall within 2026-01-01 to 2027-12-31. PIC should be a role title (e.g
           content: userPrompt,
         },
       ],
-      output_config: {
-        format: {
-          type: 'json_object',
-          schema: {
-            type: 'object',
-            properties: {
-              tasks: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    subject: { type: 'string' },
-                    planStart: { type: 'string' },
-                    planEnd: { type: 'string' },
-                    pic: { type: 'string' },
-                  },
-                  required: ['subject', 'planStart', 'planEnd', 'pic'],
-                  additionalProperties: false,
-                },
-              },
-            },
-            required: ['tasks'],
-            additionalProperties: false,
-          },
-        },
-      },
     });
 
     // Extract the text content from the response
