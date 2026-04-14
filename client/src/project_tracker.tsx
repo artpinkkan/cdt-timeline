@@ -533,8 +533,8 @@ export default function App() {
                 { l: '% Target YTD',      v: `${tgt.toFixed(1)}%`, sub: `as of ${TODAY.toLocaleString('en-US', { month: 'short', year: 'numeric' })}`, c: '#6366F1' },
                 { l: '% Actual YTD',      v: `${act.toFixed(1)}%`, sub: `${actDone}/${N} tasks`, c: '#10B981' },
                 { l: '% Achievement YTD', v: `${ach.toFixed(1)}%`, sub: 'Actual ÷ Target', c: ach < 80 ? '#EF4444' : '#10B981' },
-                { l: 'Plan Completion',   v: pc, sub: 'Projected end', c: '#F59E0B' },
                 { l: '% MTD',             v: mtdTarget > 0 ? `${mtd.toFixed(1)}%` : '–', sub: `${mtdActual}/${mtdTarget} tasks · ${mtdMonth}`, c: '#8B5CF6' },
+                { l: 'Plan Completion',   v: pc, sub: 'Projected end', c: '#F59E0B' },
               ]}
               onAdd={() => setTaskModal('add')} onEditTask={setTaskModal} onDelTask={delTask} onReorderTasks={reorderTasks}
               onEditProject={() => setProjModal(proj)}
