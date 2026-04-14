@@ -58,7 +58,7 @@ const T = {
 };
 
 const getStatus = (t: any) => {
-  if (t.done) return t.actEnd && t.planEnd && new Date(t.actEnd) > new Date(t.planEnd) ? 'Delayed' : 'Done';
+  if (t.actEnd) return t.planEnd && new Date(t.actEnd) > new Date(t.planEnd) ? 'Delayed' : 'Done';
   if (t.planEnd && TODAY > new Date(t.planEnd)) return 'Overdue';
   if (t.actStart) return 'In Progress';
   return 'Planned';
@@ -80,7 +80,7 @@ async function buildProjectPDF(project: any, tasks: any[]): Promise<any> {
   const { jsPDF } = (window as any).jspdf;
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const PW = 297, PH = 210;
-  const N = tasks.length, done = tasks.filter((t) => t.done).length, pct = N ? Math.round((done / N) * 100) : 0;
+  const N = tasks.length, done = tasks.filter((t) => t.actEnd).length, pct = N ? Math.round((done / N) * 100) : 0;
 
   // ── Page 1: Header + KPIs + Task Table ────────────────────────────────
   doc.setFillColor(15, 23, 42); doc.rect(0, 0, PW, 32, 'F');
@@ -101,7 +101,7 @@ async function buildProjectPDF(project: any, tasks: any[]): Promise<any> {
   (doc as any).autoTable({
     startY: 60,
     head: [['#', 'Task Subject', '✓', 'Status', 'Plan Start', 'Plan End', 'Act. Start', 'Act. End', 'PIC']],
-    body: tasks.map((t, i) => [i + 1, t.subject, t.done ? '✓' : '', getStatus(t), fmt(t.planStart), fmt(t.planEnd), fmt(t.actStart), fmt(t.actEnd), t.pic || '–']),
+    body: tasks.map((t, i) => [i + 1, t.subject, t.actEnd ? '✓' : '', getStatus(t), fmt(t.planStart), fmt(t.planEnd), fmt(t.actStart), fmt(t.actEnd), t.pic || '–']),
     headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8, fontStyle: 'bold' },
     bodyStyles: { fontSize: 7.5, textColor: [30, 41, 59] },
     alternateRowStyles: { fillColor: [248, 250, 252] },
@@ -200,8 +200,9 @@ async function buildProjectPDF(project: any, tasks: any[]): Promise<any> {
       const st = getStatus(t);
       const dotClr = stClr[st] || [107, 114, 128];
       doc.setFillColor(...dotClr as [number, number, number]); doc.circle(17, y + ROW_H / 2, 1, 'F');
-      doc.setTextColor(t.done ? 148 : 30, t.done ? 163 : 41, t.done ? 184 : 59);
-      doc.setFontSize(6); doc.setFont('helvetica', t.done ? 'normal' : 'normal');
+      const isDone = !!t.actEnd;
+      doc.setTextColor(isDone ? 148 : 30, isDone ? 163 : 41, isDone ? 184 : 59);
+      doc.setFontSize(6); doc.setFont('helvetica', 'normal');
       const subj = t.subject.length > 42 ? t.subject.slice(0, 42) + '…' : t.subject;
       doc.text(subj, 20, y + ROW_H / 2 + 1);
 
@@ -260,7 +261,7 @@ async function exportAllPDF(projects: any[], projectTasks: Record<number, any[]>
   const { jsPDF } = (window as any).jspdf;
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const allTasks = Object.values(projectTasks).flat();
-  const totalDone = allTasks.filter((t) => t.done).length;
+  const totalDone = allTasks.filter((t: any) => t.actEnd).length;
   const overallPct = allTasks.length ? Math.round((totalDone / allTasks.length) * 100) : 0;
   doc.setFillColor(15, 23, 42); doc.rect(0, 0, 297, 32, 'F');
   doc.setTextColor(255, 255, 255); doc.setFontSize(15); doc.setFont('helvetica', 'bold');
@@ -278,7 +279,7 @@ async function exportAllPDF(projects: any[], projectTasks: Record<number, any[]>
   (doc as any).autoTable({
     startY: 60,
     head: [['#', 'Project Name', 'Description', 'Tasks', 'Done', 'Progress']],
-    body: projects.map((p, i) => { const pt = projectTasks[p.id] || []; const dn = pt.filter((t) => t.done).length; const pct = pt.length ? Math.round((dn / pt.length) * 100) : 0; return [i + 1, p.name, p.description || '–', pt.length, dn, `${pct}%`]; }),
+    body: projects.map((p, i) => { const pt = projectTasks[p.id] || []; const dn = pt.filter((t: any) => t.actEnd).length; const pct = pt.length ? Math.round((dn / pt.length) * 100) : 0; return [i + 1, p.name, p.description || '–', pt.length, dn, `${pct}%`]; }),
     headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8, fontStyle: 'bold' },
     bodyStyles: { fontSize: 7.5, textColor: [30, 41, 59] },
     alternateRowStyles: { fillColor: [248, 250, 252] },
@@ -402,19 +403,6 @@ export default function App() {
       }
     } catch (e) { console.error(e); }
   };
-  const togTask = async (id: number) => {
-    try {
-      if (activeId) {
-        const task = tasks.find((x) => x.id === id);
-        if (task) {
-          await tasksApi.toggle(activeId, id);
-          const nextProjectTasks = { ...projectTasks, [activeId]: tasks.map((x) => (x.id === id ? { ...x, done: !x.done } : x)) };
-          setProjectTasks(nextProjectTasks);
-          updateCache(projects, nextProjectTasks);
-        }
-      }
-    } catch (e) { console.error(e); }
-  };
   const reorderTasks = async (newOrder: any[]) => {
     if (!activeId) return;
     setProjectTasks({ ...projectTasks, [activeId]: newOrder });
@@ -425,10 +413,8 @@ export default function App() {
   const N = tasks.length;
   // % Target YTD  = tasks whose plan end date has passed (were supposed to be done by today)
   const pDue = tasks.filter((t: any) => t.planEnd && new Date(t.planEnd) <= TODAY).length;
-  // % Actual YTD  = tasks that are actually done (actEnd set & ≤ today, OR toggled done without actEnd)
-  const actDone = tasks.filter((t: any) =>
-    t.actEnd ? new Date(t.actEnd) <= TODAY : t.done
-  ).length;
+  // % Actual YTD = tasks with actEnd set (and actEnd ≤ today)
+  const actDone = tasks.filter((t: any) => t.actEnd && new Date(t.actEnd) <= TODAY).length;
   const tgt = N ? (pDue / N) * 100 : 0;
   const act = N ? (actDone / N) * 100 : 0;
   const ach = tgt > 0 ? (act / tgt) * 100 : 0;
@@ -467,7 +453,7 @@ export default function App() {
                 { l: 'Plan Completion',   v: pc, sub: 'Projected end', c: '#F59E0B' },
                 { l: '% BE Achievement',  v: `${act.toFixed(1)}%`, sub: 'BE target: 100%', c: '#8B5CF6' },
               ]}
-              onAdd={() => setTaskModal('add')} onEditTask={setTaskModal} onDelTask={delTask} onTogTask={togTask} onReorderTasks={reorderTasks}
+              onAdd={() => setTaskModal('add')} onEditTask={setTaskModal} onDelTask={delTask} onReorderTasks={reorderTasks}
               onEditProject={() => setProjModal(proj)}
               onGoToToday={() => gRef.current && (gRef.current.scrollLeft = Math.max(0, (todayX || 0) - 280))}
               onGenTasks={() => setTaskModal('generate')} />
@@ -482,7 +468,7 @@ export default function App() {
 // ── Sidebar ───────────────────────────────────────────────────────────
 function Sidebar({ projects, projectTasks, activeId, user, logout, onDashboard, onSelect, onNew, collapsed, onToggle }: any) {
   const totT = projects.reduce((s: number, p: any) => s + (projectTasks[p.id] || []).length, 0);
-  const totD = projects.reduce((s: number, p: any) => s + (projectTasks[p.id] || []).filter((t: any) => t.done).length, 0);
+  const totD = projects.reduce((s: number, p: any) => s + (projectTasks[p.id] || []).filter((t: any) => t.actEnd).length, 0);
   const pct = totT ? Math.round((totD / totT) * 100) : 0;
   const W = collapsed ? 60 : 234;
 
@@ -520,7 +506,7 @@ function Sidebar({ projects, projectTasks, activeId, user, logout, onDashboard, 
         {collapsed && <div style={{ height: 1, background: T.border, margin: '8px 4px' }} />}
 
         {projects.map((p: any) => {
-          const pt = projectTasks[p.id] || [], pd = pt.filter((t: any) => t.done).length, pp = pt.length ? Math.round((pd / pt.length) * 100) : 0, active = activeId === p.id;
+          const pt = projectTasks[p.id] || [], pd = pt.filter((t: any) => t.actEnd).length, pp = pt.length ? Math.round((pd / pt.length) * 100) : 0, active = activeId === p.id;
           return (
             <button key={p.id} onClick={() => onSelect(p.id)} title={p.name} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: collapsed ? '9px 0' : '8px 11px', justifyContent: collapsed ? 'center' : 'flex-start', borderRadius: 9, border: 'none', cursor: 'pointer', marginBottom: 2, background: active ? '#EEF2FF' : 'transparent', textAlign: 'left', transition: 'all 0.15s' }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: p.color, flexShrink: 0 }} />
@@ -615,7 +601,7 @@ function Dashboard({ projects, projectTasks, onSelect, onNew, onEdit, onDelete }
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(310px,1fr))', gap: 16 }}>
           {projects.map((p: any) => {
-            const pt = projectTasks[p.id] || [], pdone = pt.filter((t: any) => t.done).length, pct = pt.length ? Math.round((pdone / pt.length) * 100) : 0;
+            const pt = projectTasks[p.id] || [], pdone = pt.filter((t: any) => t.actEnd).length, pct = pt.length ? Math.round((pdone / pt.length) * 100) : 0;
             const counts: any = { Done: 0, 'In Progress': 0, Overdue: 0, Delayed: 0, Planned: 0 };
             pt.forEach((t: any) => { const s = getStatus(t); if (counts[s] !== undefined) counts[s]++; });
             const maxP = pt.reduce((m: Date, t: any) => { const d = t.planEnd ? new Date(t.planEnd) : null; return d && d > m ? d : m; }, new Date(0));
@@ -670,7 +656,7 @@ function Dashboard({ projects, projectTasks, onSelect, onNew, onEdit, onDelete }
 }
 
 // ── Project Page ──────────────────────────────────────────────────────
-function ProjectPage({ project, tasks, view, setView, gRef, todayX, kpis, onAdd, onEditTask, onDelTask, onTogTask, onReorderTasks, onEditProject, onGoToToday, onGenTasks }: any) {
+function ProjectPage({ project, tasks, view, setView, gRef, todayX, kpis, onAdd, onEditTask, onDelTask, onReorderTasks, onEditProject, onGoToToday, onGenTasks }: any) {
   const [showIR, setShowIR] = useState(false);
   const [exporting, setExporting] = useState(false);
 
@@ -759,10 +745,10 @@ function ProjectPage({ project, tasks, view, setView, gRef, todayX, kpis, onAdd,
 
       {/* View content */}
       <div style={{ padding: '0 24px 28px' }}>
-        {view === 'gantt'  && <GanttView  tasks={tasks} todayX={todayX} gRef={gRef} onEdit={onEditTask} onDel={onDelTask} onTog={onTogTask} onReorder={onReorderTasks} />}
-        {view === 'list'   && <ListView   tasks={tasks} onEdit={onEditTask} onDel={onDelTask} onTog={onTogTask} onReorder={onReorderTasks} />}
-        {view === 'board'  && <BoardView  tasks={tasks} onEdit={onEditTask} onDel={onDelTask} onTog={onTogTask} />}
-        {view === 'kanban' && <KanbanView tasks={tasks} onEdit={onEditTask} onDel={onDelTask} onTog={onTogTask} />}
+        {view === 'gantt'  && <GanttView  tasks={tasks} todayX={todayX} gRef={gRef} onEdit={onEditTask} onDel={onDelTask} onReorder={onReorderTasks} />}
+        {view === 'list'   && <ListView   tasks={tasks} onEdit={onEditTask} onDel={onDelTask} onReorder={onReorderTasks} />}
+        {view === 'board'  && <BoardView  tasks={tasks} onEdit={onEditTask} onDel={onDelTask} />}
+        {view === 'kanban' && <KanbanView tasks={tasks} onEdit={onEditTask} onDel={onDelTask} />}
       </div>
 
     </div>
@@ -770,7 +756,7 @@ function ProjectPage({ project, tasks, view, setView, gRef, todayX, kpis, onAdd,
 }
 
 // ── Gantt ─────────────────────────────────────────────────────────────
-function GanttView({ tasks, todayX, gRef, onEdit, onDel, onTog, onReorder }: any) {
+function GanttView({ tasks, todayX, gRef, onEdit, onDel, onReorder }: any) {
   const RH = 52, HH = 52;
   const [pendingDel, setPendingDel] = useState<number | null>(null);
   const [dragId, setDragId]     = useState<number | null>(null);
@@ -870,11 +856,8 @@ function GanttView({ tasks, todayX, gRef, onEdit, onDel, onTog, onReorder }: any
                   )}
                 </div>
                 <div style={{ width: 180, display: 'flex', alignItems: 'center', gap: 7, padding: '0 8px', overflow: 'hidden', flexShrink: 0 }}>
-                  <div onClick={() => onTog(t.id)} style={{ width: 17, height: 17, borderRadius: 5, border: `2px solid ${t.done ? '#10B981' : '#CBD5E1'}`, background: t.done ? '#10B981' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s' }}>
-                    {t.done && <span style={{ color: '#fff', fontSize: 10, fontWeight: 700, lineHeight: 1 }}>✓</span>}
-                  </div>
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: sc.dot, flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, color: t.done ? T.faint : T.text, textDecoration: t.done ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.subject}</span>
+                  <span style={{ fontSize: 12, color: t.actEnd ? T.faint : T.text, textDecoration: t.actEnd ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.subject}</span>
                 </div>
                 <div style={{ width: 88, display: 'flex', alignItems: 'center', padding: '0 8px', flexShrink: 0 }}>
                   <span style={dateCell}>{fmt(t.planStart)}</span>
@@ -953,7 +936,7 @@ function GanttView({ tasks, todayX, gRef, onEdit, onDel, onTog, onReorder }: any
 }
 
 // ── List View ─────────────────────────────────────────────────────────
-function ListView({ tasks, onEdit, onDel, onTog, onReorder }: any) {
+function ListView({ tasks, onEdit, onDel, onReorder }: any) {
   const [pendingDel, setPendingDel] = useState<number | null>(null);
   const [dragId, setDragId]         = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
@@ -998,12 +981,7 @@ function ListView({ tasks, onEdit, onDel, onTog, onReorder }: any) {
                 <td style={{ padding: '11px 14px', maxWidth: 260 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ width: 6, height: 6, borderRadius: '50%', background: sc.dot, flexShrink: 0 }} />
-                    <span style={{ color: t.done ? T.faint : T.text, textDecoration: t.done ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.subject}</span>
-                  </div>
-                </td>
-                <td style={{ padding: '11px 14px', textAlign: 'center', width: 50 }}>
-                  <div onClick={() => onTog(t.id)} style={{ width: 19, height: 19, borderRadius: 6, border: `2px solid ${t.done ? '#10B981' : '#CBD5E1'}`, background: t.done ? '#10B981' : '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.15s' }}>
-                    {t.done && <span style={{ color: '#fff', fontSize: 11, fontWeight: 700, lineHeight: 1 }}>✓</span>}
+                    <span style={{ color: t.actEnd ? T.faint : T.text, textDecoration: t.actEnd ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.subject}</span>
                   </div>
                 </td>
                 <td style={{ padding: '11px 14px', whiteSpace: 'nowrap' }}>
@@ -1034,7 +1012,7 @@ function ListView({ tasks, onEdit, onDel, onTog, onReorder }: any) {
 }
 
 // ── Board View ────────────────────────────────────────────────────────
-function BoardView({ tasks, onEdit, onDel, onTog }: any) {
+function BoardView({ tasks, onEdit, onDel }: any) {
   return (
     <div style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 4 }}>
       {['Planned', 'In Progress', 'Overdue', 'Delayed', 'Done'].map((col) => {
@@ -1053,8 +1031,7 @@ function BoardView({ tasks, onEdit, onDel, onTog }: any) {
                   <div style={{ fontSize: 11, color: T.muted, marginBottom: 2 }}>PIC: {t.pic || '–'}</div>
                   <div style={{ fontSize: 11, color: T.muted, marginBottom: 12 }}>Due: {fmt(t.planEnd)}</div>
                   <div style={{ display: 'flex', gap: 5 }}>
-                    <button onClick={() => onTog(t.id)} style={{ flex: 1, background: sc.bg, color: sc.tx, border: `1px solid ${sc.dot}33`, borderRadius: 7, padding: '5px 0', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>{t.done ? 'Reopen' : 'Mark Done'}</button>
-                    <button onClick={() => onEdit(t)} style={{ ...T.btnGhost, padding: '5px 9px', fontSize: 11 }}>✏</button>
+                    <button onClick={() => onEdit(t)} style={{ ...T.btnGhost, flex: 1, padding: '5px 9px', fontSize: 11 }}>✏ Edit</button>
                     <button onClick={() => onDel(t.id)} style={{ background: '#FEF2F2', color: '#EF4444', border: 'none', borderRadius: 7, padding: '5px 9px', cursor: 'pointer', fontSize: 11 }}>✕</button>
                   </div>
                 </div>
@@ -1069,7 +1046,7 @@ function BoardView({ tasks, onEdit, onDel, onTog }: any) {
 }
 
 // ── Kanban View ───────────────────────────────────────────────────────
-function KanbanView({ tasks, onEdit, onDel, onTog }: any) {
+function KanbanView({ tasks, onEdit, onDel }: any) {
   return (
     <div style={{ ...T.card, overflow: 'hidden' }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)' }}>
@@ -1088,8 +1065,7 @@ function KanbanView({ tasks, onEdit, onDel, onTog }: any) {
                     <div style={{ fontWeight: 700, color: T.text, marginBottom: 3, lineHeight: 1.3, fontSize: 11 }}>{t.subject}</div>
                     <div style={{ color: T.muted, fontSize: 10, marginBottom: 8 }}>{t.pic || '–'} · {fmt(t.planEnd)}</div>
                     <div style={{ display: 'flex', gap: 4 }}>
-                      <button onClick={() => onTog(t.id)} style={{ flex: 1, background: sc.bg, color: sc.tx, border: 'none', borderRadius: 6, padding: '4px 0', cursor: 'pointer', fontSize: 10, fontWeight: 700 }}>{t.done ? 'Reopen' : 'Done'}</button>
-                      <button onClick={() => onEdit(t)} style={{ background: '#EEF2FF', color: T.accent, border: 'none', borderRadius: 6, padding: '4px 7px', cursor: 'pointer', fontSize: 10 }}>✏</button>
+                      <button onClick={() => onEdit(t)} style={{ flex: 1, background: '#EEF2FF', color: T.accent, border: 'none', borderRadius: 6, padding: '4px 7px', cursor: 'pointer', fontSize: 10 }}>✏ Edit</button>
                       <button onClick={() => onDel(t.id)} style={{ background: '#FEF2F2', color: '#EF4444', border: 'none', borderRadius: 6, padding: '4px 7px', cursor: 'pointer', fontSize: 10 }}>✕</button>
                     </div>
                   </div>
