@@ -496,6 +496,13 @@ export default function App() {
   const ach = tgt > 0 ? (act / tgt) * 100 : act > 0 ? 100 : 0;
   // Plan Completion from project-level plan_end (editable via Edit Project modal)
   const pc = proj?.plan_end ? new Date(proj.plan_end).toLocaleString('en-US', { month: 'short', year: 'numeric' }) : '–';
+  // % MTD = tasks planned to finish this month vs tasks actually finished this month
+  const thisMonth = TODAY.getMonth(), thisYear = TODAY.getFullYear();
+  const inThisMonth = (ds: string) => { const d = new Date(ds); return d.getMonth() === thisMonth && d.getFullYear() === thisYear; };
+  const mtdTarget = tasks.filter((t: any) => t.planEnd && inThisMonth(t.planEnd)).length;
+  const mtdActual = tasks.filter((t: any) => t.actEnd  && inThisMonth(t.actEnd)).length;
+  const mtd = mtdTarget > 0 ? (mtdActual / mtdTarget) * 100 : 0;
+  const mtdMonth = TODAY.toLocaleString('en-US', { month: 'short', year: 'numeric' });
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: T.bg, fontFamily: 'system-ui,sans-serif' }}>
@@ -527,6 +534,7 @@ export default function App() {
                 { l: '% Actual YTD',      v: `${act.toFixed(1)}%`, sub: `${actDone}/${N} tasks`, c: '#10B981' },
                 { l: '% Achievement YTD', v: `${ach.toFixed(1)}%`, sub: 'Actual ÷ Target', c: ach < 80 ? '#EF4444' : '#10B981' },
                 { l: 'Plan Completion',   v: pc, sub: 'Projected end', c: '#F59E0B' },
+                { l: '% MTD',             v: mtdTarget > 0 ? `${mtd.toFixed(1)}%` : '–', sub: `${mtdActual}/${mtdTarget} tasks · ${mtdMonth}`, c: '#8B5CF6' },
               ]}
               onAdd={() => setTaskModal('add')} onEditTask={setTaskModal} onDelTask={delTask} onReorderTasks={reorderTasks}
               onEditProject={() => setProjModal(proj)}
