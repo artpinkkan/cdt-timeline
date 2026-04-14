@@ -559,7 +559,7 @@ function Sidebar({ projects, projectTasks, activeId, user, logout, onDashboard, 
           {!collapsed && (
             <div style={{ overflow: 'hidden' }}>
               <div style={{ color: T.text, fontWeight: 700, fontSize: 14, lineHeight: 1.2, whiteSpace: 'nowrap' }}>FinalPush.io</div>
-              <div style={{ color: T.faint, fontSize: 11, whiteSpace: 'nowrap' }}>Menuju CDT tanpa #PICAPA</div>
+              <div style={{ color: T.faint, fontSize: 11 }}>Menuju CDT tanpa<br />#PICAPA</div>
             </div>
           )}
         </div>
