@@ -496,11 +496,18 @@ export default function App() {
   const ach = tgt > 0 ? (act / tgt) * 100 : act > 0 ? 100 : 0;
   // Plan Completion from project-level plan_end (editable via Edit Project modal)
   const pc = proj?.plan_end ? new Date(proj.plan_end).toLocaleString('en-US', { month: 'short', year: 'numeric' }) : '–';
-  // % MTD = tasks planned to finish this month vs tasks actually finished this month
+  // % MTD = tasks planned to be active this month (plan overlaps current month) vs those actually started/done
   const thisMonth = TODAY.getMonth(), thisYear = TODAY.getFullYear();
-  const inThisMonth = (ds: string) => { const d = new Date(ds); return d.getMonth() === thisMonth && d.getFullYear() === thisYear; };
-  const mtdTarget = tasks.filter((t: any) => t.planEnd && inThisMonth(t.planEnd)).length;
-  const mtdActual = tasks.filter((t: any) => t.actEnd  && inThisMonth(t.actEnd)).length;
+  const monthStart = new Date(thisYear, thisMonth, 1);
+  const monthEnd   = new Date(thisYear, thisMonth + 1, 0); // last day of month
+  const overlapsThisMonth = (t: any) => {
+    if (!t.planStart || !t.planEnd) return false;
+    const ps = new Date(t.planStart), pe = new Date(t.planEnd);
+    return ps <= monthEnd && pe >= monthStart;
+  };
+  const mtdTargetTasks = tasks.filter(overlapsThisMonth);
+  const mtdTarget = mtdTargetTasks.length;
+  const mtdActual = mtdTargetTasks.filter((t: any) => t.actStart || t.actEnd).length;
   const mtd = mtdTarget > 0 ? (mtdActual / mtdTarget) * 100 : 0;
   const mtdMonth = TODAY.toLocaleString('en-US', { month: 'short', year: 'numeric' });
 
