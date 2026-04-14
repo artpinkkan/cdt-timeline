@@ -72,7 +72,6 @@ const overlapsThisMonth = (t: any) =>
   !!t.planStart && !!t.planEnd &&
   new Date(t.planStart) <= _MONTH_END &&
   new Date(t.planEnd)   >= _MONTH_START;
-};
 
 const fmt = (ds: string) => (ds ? new Date(ds).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '–');
 
@@ -876,44 +875,8 @@ function GanttView({ tasks, todayX, gRef, onEdit, onDel, onReorder, onInlineSave
   };
 
   const cancelEdit = () => setEditCell(null);
-
-  const EditableDate = ({ task, field, value, style }: any) => {
-    const active = editCell?.taskId === task.id && editCell?.field === field;
-    if (active) return (
-      <input type="date" autoFocus value={editCell!.value}
-        onChange={e => setEditCell({ ...editCell!, value: e.target.value })}
-        onBlur={() => commitEdit(task)}
-        onKeyDown={e => { if (e.key === 'Enter') commitEdit(task); if (e.key === 'Escape') cancelEdit(); e.stopPropagation(); }}
-        style={{ width: '100%', border: 'none', borderBottom: '2px solid #6366F1', outline: 'none', background: 'transparent', fontSize: 11, color: T.text, cursor: 'text' }}
-      />
-    );
-    return (
-      <span onDoubleClick={e => startEdit(e, task.id, field, task[field])}
-        style={{ ...style, display: 'block', width: '100%', cursor: 'text', borderRadius: 3, padding: '1px 2px' }}
-        title="Double-click to edit">
-        {fmt(task[field])}
-      </span>
-    );
-  };
-
-  const EditableText = ({ task, field, style, children }: any) => {
-    const active = editCell?.taskId === task.id && editCell?.field === field;
-    if (active) return (
-      <input type="text" autoFocus value={editCell!.value}
-        onChange={e => setEditCell({ ...editCell!, value: e.target.value })}
-        onBlur={() => commitEdit(task)}
-        onKeyDown={e => { if (e.key === 'Enter') commitEdit(task); if (e.key === 'Escape') cancelEdit(); e.stopPropagation(); }}
-        style={{ flex: 1, minWidth: 0, border: 'none', borderBottom: '2px solid #6366F1', outline: 'none', background: 'transparent', fontSize: 12, color: T.text }}
-      />
-    );
-    return (
-      <span onDoubleClick={e => startEdit(e, task.id, field, task[field])}
-        style={{ ...style, cursor: 'text' }}
-        title="Double-click to edit">
-        {children}
-      </span>
-    );
-  };
+  const isEditing = (taskId: number, field: string) => editCell?.taskId === taskId && editCell?.field === field;
+  const inputStyle = { border: 'none', borderBottom: '2px solid #6366F1', outline: 'none', background: 'transparent', color: T.text } as React.CSSProperties;
 
   const handleDrop = (targetId: number) => {
     if (dragId === null || dragId === targetId) return;
@@ -997,29 +960,70 @@ function GanttView({ tasks, todayX, gRef, onEdit, onDel, onReorder, onInlineSave
                   <button onClick={() => onEdit(t)} style={{ background: '#EEF2FF', color: T.accent, border: 'none', borderRadius: 5, padding: '3px 6px', cursor: 'pointer', fontSize: 11 }}>✏</button>
                   <button onClick={() => setPendingDel(t)} style={{ background: '#FEF2F2', color: '#EF4444', border: 'none', borderRadius: 5, padding: '3px 6px', cursor: 'pointer', fontSize: 11 }}>✕</button>
                 </div>
+                {/* Subject */}
                 <div style={{ width: 180, display: 'flex', alignItems: 'center', gap: 7, padding: '0 8px', overflow: 'hidden', flexShrink: 0 }}>
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: sc.dot, flexShrink: 0 }} />
-                  <EditableText task={t} field="subject" style={{ fontSize: 12, color: t.actEnd ? T.faint : T.text, textDecoration: t.actEnd ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
-                    {t.subject}
-                  </EditableText>
+                  {isEditing(t.id, 'subject')
+                    ? <input autoFocus type="text" value={editCell!.value}
+                        onChange={e => setEditCell({ ...editCell!, value: e.target.value })}
+                        onBlur={() => commitEdit(t)}
+                        onKeyDown={e => { if (e.key === 'Enter') commitEdit(t); if (e.key === 'Escape') cancelEdit(); e.stopPropagation(); }}
+                        style={{ ...inputStyle, flex: 1, minWidth: 0, fontSize: 12 }} />
+                    : <span onDoubleClick={e => startEdit(e, t.id, 'subject', t.subject)}
+                        title="Double-click to edit"
+                        style={{ fontSize: 12, color: t.actEnd ? T.faint : T.text, textDecoration: t.actEnd ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0, cursor: 'text' }}>
+                        {t.subject}
+                      </span>}
                 </div>
+                {/* Plan Start */}
                 <div style={{ width: 88, display: 'flex', alignItems: 'center', padding: '0 8px', flexShrink: 0 }}>
-                  <EditableDate task={t} field="planStart" style={dateCell} />
+                  {isEditing(t.id, 'planStart')
+                    ? <input autoFocus type="date" value={editCell!.value}
+                        onChange={e => setEditCell({ ...editCell!, value: e.target.value })}
+                        onBlur={() => commitEdit(t)}
+                        onKeyDown={e => { if (e.key === 'Enter') commitEdit(t); if (e.key === 'Escape') cancelEdit(); e.stopPropagation(); }}
+                        style={{ ...inputStyle, width: '100%', fontSize: 11 }} />
+                    : <span onDoubleClick={e => startEdit(e, t.id, 'planStart', t.planStart)} title="Double-click to edit" style={{ ...dateCell, display: 'block', width: '100%', cursor: 'text' }}>{fmt(t.planStart)}</span>}
                 </div>
+                {/* Plan End */}
                 <div style={{ width: 88, display: 'flex', alignItems: 'center', padding: '0 8px', flexShrink: 0, borderLeft: `1px solid ${T.border}` }}>
-                  <EditableDate task={t} field="planEnd" style={dateCell} />
+                  {isEditing(t.id, 'planEnd')
+                    ? <input autoFocus type="date" value={editCell!.value}
+                        onChange={e => setEditCell({ ...editCell!, value: e.target.value })}
+                        onBlur={() => commitEdit(t)}
+                        onKeyDown={e => { if (e.key === 'Enter') commitEdit(t); if (e.key === 'Escape') cancelEdit(); e.stopPropagation(); }}
+                        style={{ ...inputStyle, width: '100%', fontSize: 11 }} />
+                    : <span onDoubleClick={e => startEdit(e, t.id, 'planEnd', t.planEnd)} title="Double-click to edit" style={{ ...dateCell, display: 'block', width: '100%', cursor: 'text' }}>{fmt(t.planEnd)}</span>}
                 </div>
+                {/* Act Start */}
                 <div style={{ width: 88, display: 'flex', alignItems: 'center', padding: '0 8px', flexShrink: 0, borderLeft: `1px solid #F0F4FF`, background: i % 2 === 0 ? '#FAFEFF' : '#F5FAFF' }}>
-                  <EditableDate task={t} field="actStart" style={{ ...dateCell, color: t.actStart ? '#059669' : T.faint }} />
+                  {isEditing(t.id, 'actStart')
+                    ? <input autoFocus type="date" value={editCell!.value}
+                        onChange={e => setEditCell({ ...editCell!, value: e.target.value })}
+                        onBlur={() => commitEdit(t)}
+                        onKeyDown={e => { if (e.key === 'Enter') commitEdit(t); if (e.key === 'Escape') cancelEdit(); e.stopPropagation(); }}
+                        style={{ ...inputStyle, width: '100%', fontSize: 11 }} />
+                    : <span onDoubleClick={e => startEdit(e, t.id, 'actStart', t.actStart)} title="Double-click to edit" style={{ ...dateCell, color: t.actStart ? '#059669' : T.faint, display: 'block', width: '100%', cursor: 'text' }}>{fmt(t.actStart)}</span>}
                 </div>
+                {/* Act End */}
                 <div style={{ width: 88, display: 'flex', alignItems: 'center', padding: '0 8px', flexShrink: 0, borderLeft: `1px solid #F0F4FF`, background: i % 2 === 0 ? '#FAFEFF' : '#F5FAFF' }}>
-                  <EditableDate task={t} field="actEnd" style={{ ...dateCell, color: t.actEnd ? '#059669' : T.faint }} />
+                  {isEditing(t.id, 'actEnd')
+                    ? <input autoFocus type="date" value={editCell!.value}
+                        onChange={e => setEditCell({ ...editCell!, value: e.target.value })}
+                        onBlur={() => commitEdit(t)}
+                        onKeyDown={e => { if (e.key === 'Enter') commitEdit(t); if (e.key === 'Escape') cancelEdit(); e.stopPropagation(); }}
+                        style={{ ...inputStyle, width: '100%', fontSize: 11 }} />
+                    : <span onDoubleClick={e => startEdit(e, t.id, 'actEnd', t.actEnd)} title="Double-click to edit" style={{ ...dateCell, color: t.actEnd ? '#059669' : T.faint, display: 'block', width: '100%', cursor: 'text' }}>{fmt(t.actEnd)}</span>}
                 </div>
                 {/* PIC */}
                 <div style={{ width: 68, display: 'flex', alignItems: 'center', padding: '0 8px', flexShrink: 0, borderLeft: `1px solid ${T.border}` }}>
-                  <EditableText task={t} field="pic" style={{ fontSize: 11, color: T.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {t.pic || '–'}
-                  </EditableText>
+                  {isEditing(t.id, 'pic')
+                    ? <input autoFocus type="text" value={editCell!.value}
+                        onChange={e => setEditCell({ ...editCell!, value: e.target.value })}
+                        onBlur={() => commitEdit(t)}
+                        onKeyDown={e => { if (e.key === 'Enter') commitEdit(t); if (e.key === 'Escape') cancelEdit(); e.stopPropagation(); }}
+                        style={{ ...inputStyle, width: '100%', fontSize: 11 }} />
+                    : <span onDoubleClick={e => startEdit(e, t.id, 'pic', t.pic)} title="Double-click to edit" style={{ fontSize: 11, color: T.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', width: '100%', cursor: 'text' }}>{t.pic || '–'}</span>}
                 </div>
               </div>
             );
