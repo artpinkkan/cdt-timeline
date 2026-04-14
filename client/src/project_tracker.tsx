@@ -844,7 +844,7 @@ function ProjectPage({ project, tasks, view, setView, gRef, todayX, kpis, onAdd,
 
       {/* View content */}
       <div style={{ padding: '0 24px 28px' }}>
-        {view === 'gantt'  && <GanttView  tasks={tasks} todayX={todayX} gRef={gRef} onEdit={onEditTask} onDel={onDelTask} onReorder={onReorderTasks} />}
+        {view === 'gantt'  && <GanttView  tasks={tasks} todayX={todayX} gRef={gRef} onEdit={onEditTask} onDel={onDelTask} onReorder={onReorderTasks} onInlineSave={saveTask} />}
         {view === 'list'   && <ListView   tasks={tasks} onEdit={onEditTask} onDel={onDelTask} onReorder={onReorderTasks} />}
         {view === 'board'  && <BoardView  tasks={tasks} onEdit={onEditTask} onDel={onDelTask} />}
         {view === 'kanban' && <KanbanView tasks={tasks} onEdit={onEditTask} onDel={onDelTask} />}
@@ -855,11 +855,65 @@ function ProjectPage({ project, tasks, view, setView, gRef, todayX, kpis, onAdd,
 }
 
 // ── Gantt ─────────────────────────────────────────────────────────────
-function GanttView({ tasks, todayX, gRef, onEdit, onDel, onReorder }: any) {
+function GanttView({ tasks, todayX, gRef, onEdit, onDel, onReorder, onInlineSave }: any) {
   const RH = 52, HH = 52;
   const [pendingDel, setPendingDel] = useState<any | null>(null);
-  const [dragId, setDragId]     = useState<number | null>(null);
+  const [dragId, setDragId]         = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
+  const [editCell, setEditCell]     = useState<{ taskId: number; field: string; value: string } | null>(null);
+
+  const startEdit = (e: React.MouseEvent, taskId: number, field: string, value: string) => {
+    e.stopPropagation();
+    setEditCell({ taskId, field, value: value || '' });
+  };
+
+  const commitEdit = (task: any) => {
+    if (!editCell) return;
+    const merged: any = { ...task, [editCell.field]: editCell.value || null };
+    if (editCell.field === 'actEnd') merged.done = !!editCell.value;
+    setEditCell(null);
+    onInlineSave(merged);
+  };
+
+  const cancelEdit = () => setEditCell(null);
+
+  const EditableDate = ({ task, field, value, style }: any) => {
+    const active = editCell?.taskId === task.id && editCell?.field === field;
+    if (active) return (
+      <input type="date" autoFocus value={editCell!.value}
+        onChange={e => setEditCell({ ...editCell!, value: e.target.value })}
+        onBlur={() => commitEdit(task)}
+        onKeyDown={e => { if (e.key === 'Enter') commitEdit(task); if (e.key === 'Escape') cancelEdit(); e.stopPropagation(); }}
+        style={{ width: '100%', border: 'none', borderBottom: '2px solid #6366F1', outline: 'none', background: 'transparent', fontSize: 11, color: T.text, cursor: 'text' }}
+      />
+    );
+    return (
+      <span onDoubleClick={e => startEdit(e, task.id, field, task[field])}
+        style={{ ...style, display: 'block', width: '100%', cursor: 'text', borderRadius: 3, padding: '1px 2px' }}
+        title="Double-click to edit">
+        {fmt(task[field])}
+      </span>
+    );
+  };
+
+  const EditableText = ({ task, field, style, children }: any) => {
+    const active = editCell?.taskId === task.id && editCell?.field === field;
+    if (active) return (
+      <input type="text" autoFocus value={editCell!.value}
+        onChange={e => setEditCell({ ...editCell!, value: e.target.value })}
+        onBlur={() => commitEdit(task)}
+        onKeyDown={e => { if (e.key === 'Enter') commitEdit(task); if (e.key === 'Escape') cancelEdit(); e.stopPropagation(); }}
+        style={{ flex: 1, minWidth: 0, border: 'none', borderBottom: '2px solid #6366F1', outline: 'none', background: 'transparent', fontSize: 12, color: T.text }}
+      />
+    );
+    return (
+      <span onDoubleClick={e => startEdit(e, task.id, field, task[field])}
+        style={{ ...style, cursor: 'text' }}
+        title="Double-click to edit">
+        {children}
+      </span>
+    );
+  };
 
   const handleDrop = (targetId: number) => {
     if (dragId === null || dragId === targetId) return;
@@ -930,12 +984,12 @@ function GanttView({ tasks, todayX, gRef, onEdit, onDel, onReorder }: any) {
             const isDragOver  = dragOverId === t.id && dragId !== t.id;
             return (
               <div key={t.id}
-                draggable
+                draggable={editCell?.taskId !== t.id}
                 onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; setDragId(t.id); }}
                 onDragOver={(e) => { e.preventDefault(); setDragOverId(t.id); }}
                 onDrop={() => handleDrop(t.id)}
                 onDragEnd={() => { setDragId(null); setDragOverId(null); }}
-                style={{ display: 'flex', height: RH, borderBottom: `1px solid ${T.border}`, borderRight: `2px solid ${T.border}`, background: isDragOver ? '#EEF2FF' : i % 2 === 0 ? '#fff' : '#FAFBFF', opacity: isDragging ? 0.4 : 1, transition: 'background 0.1s' }}>
+                style={{ display: 'flex', height: RH, borderBottom: `1px solid ${T.border}`, borderRight: `2px solid ${T.border}`, background: isDragOver ? '#EEF2FF' : editCell?.taskId === t.id ? '#F5F7FF' : i % 2 === 0 ? '#fff' : '#FAFBFF', opacity: isDragging ? 0.4 : 1, transition: 'background 0.1s' }}>
                 {/* Drag handle */}
                 <div style={{ width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'grab', color: T.faint, fontSize: 13, userSelect: 'none' }}>⠿</div>
                 {/* Edit / Delete */}
@@ -945,23 +999,27 @@ function GanttView({ tasks, todayX, gRef, onEdit, onDel, onReorder }: any) {
                 </div>
                 <div style={{ width: 180, display: 'flex', alignItems: 'center', gap: 7, padding: '0 8px', overflow: 'hidden', flexShrink: 0 }}>
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: sc.dot, flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, color: t.actEnd ? T.faint : T.text, textDecoration: t.actEnd ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.subject}</span>
+                  <EditableText task={t} field="subject" style={{ fontSize: 12, color: t.actEnd ? T.faint : T.text, textDecoration: t.actEnd ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+                    {t.subject}
+                  </EditableText>
                 </div>
                 <div style={{ width: 88, display: 'flex', alignItems: 'center', padding: '0 8px', flexShrink: 0 }}>
-                  <span style={dateCell}>{fmt(t.planStart)}</span>
+                  <EditableDate task={t} field="planStart" style={dateCell} />
                 </div>
                 <div style={{ width: 88, display: 'flex', alignItems: 'center', padding: '0 8px', flexShrink: 0, borderLeft: `1px solid ${T.border}` }}>
-                  <span style={dateCell}>{fmt(t.planEnd)}</span>
+                  <EditableDate task={t} field="planEnd" style={dateCell} />
                 </div>
                 <div style={{ width: 88, display: 'flex', alignItems: 'center', padding: '0 8px', flexShrink: 0, borderLeft: `1px solid #F0F4FF`, background: i % 2 === 0 ? '#FAFEFF' : '#F5FAFF' }}>
-                  <span style={{ ...dateCell, color: t.actStart ? '#059669' : T.faint }}>{fmt(t.actStart)}</span>
+                  <EditableDate task={t} field="actStart" style={{ ...dateCell, color: t.actStart ? '#059669' : T.faint }} />
                 </div>
                 <div style={{ width: 88, display: 'flex', alignItems: 'center', padding: '0 8px', flexShrink: 0, borderLeft: `1px solid #F0F4FF`, background: i % 2 === 0 ? '#FAFEFF' : '#F5FAFF' }}>
-                  <span style={{ ...dateCell, color: t.actEnd ? '#059669' : T.faint }}>{fmt(t.actEnd)}</span>
+                  <EditableDate task={t} field="actEnd" style={{ ...dateCell, color: t.actEnd ? '#059669' : T.faint }} />
                 </div>
                 {/* PIC */}
                 <div style={{ width: 68, display: 'flex', alignItems: 'center', padding: '0 8px', flexShrink: 0, borderLeft: `1px solid ${T.border}` }}>
-                  <span style={{ fontSize: 11, color: T.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.pic || '–'}</span>
+                  <EditableText task={t} field="pic" style={{ fontSize: 11, color: T.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {t.pic || '–'}
+                  </EditableText>
                 </div>
               </div>
             );
@@ -1015,8 +1073,9 @@ function GanttView({ tasks, todayX, gRef, onEdit, onDel, onReorder }: any) {
           <span style={{ width: 10, height: 10, borderRadius: 2, background: '#A7F3D0', display: 'inline-block', marginLeft: 4 }} /> Actual
           <span style={{ width: 10, height: 10, borderRadius: 2, background: '#FCA5A5', display: 'inline-block', marginLeft: 4 }} /> Delayed
         </span>
-        <span style={{ fontSize: 11, color: T.faint }}>
-          {tasks.length} tasks · {TL_S.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })} – {TL_E.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+        <span style={{ fontSize: 11, color: T.faint, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span>{tasks.length} tasks · {TL_S.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })} – {TL_E.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
+          <span style={{ color: '#A5B4FC' }}>✎ Double-click any cell to edit inline</span>
         </span>
       </div>
       {pendingDel && (
