@@ -66,6 +66,23 @@ const getStatus = (t: any) => {
 
 const fmt = (ds: string) => (ds ? new Date(ds).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '–');
 
+// ── Confirm / Delete modal ────────────────────────────────────────────
+function ConfirmModal({ title, message, onConfirm, onCancel }: { title: string; message: string; onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <div onClick={onCancel} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(5px)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: '32px 28px', width: 380, maxWidth: '100%', boxShadow: '0 24px 64px rgba(0,0,0,0.18)', textAlign: 'center' }}>
+        <div style={{ width: 52, height: 52, borderRadius: 16, background: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, margin: '0 auto 18px' }}>🗑️</div>
+        <h3 style={{ margin: '0 0 10px', fontSize: 17, fontWeight: 700, color: T.text }}>{title}</h3>
+        <p style={{ margin: '0 0 26px', fontSize: 13, color: T.muted, lineHeight: 1.65 }}>{message}</p>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+          <button onClick={onCancel} style={{ padding: '9px 22px', borderRadius: 9, border: `1px solid ${T.border}`, background: '#fff', color: T.muted, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Cancel</button>
+          <button onClick={onConfirm} style={{ padding: '9px 22px', borderRadius: 9, border: 'none', background: '#EF4444', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Delete</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const loadScript = (src: string) =>
   new Promise((res, rej) => {
     if (document.querySelector(`script[src="${src}"]`)) { res(null); return; }
@@ -358,6 +375,7 @@ export default function App() {
   const [view, setView] = useState('gantt');
   const [taskModal, setTaskModal] = useState<any>(null);
   const [projModal, setProjModal] = useState<any>(null);
+  const [delProjConfirm, setDelProjConfirm] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const gRef = useRef<HTMLDivElement>(null);
@@ -423,8 +441,6 @@ export default function App() {
     } catch (e) { console.error(e); }
   };
   const delProject = async (id: number) => {
-    const proj = projects.find((p: any) => p.id === id);
-    if (!window.confirm(`Delete "${proj?.name ?? 'this project'}" and all its tasks? This cannot be undone.`)) return;
     try {
       await projectsApi.delete(id);
       const nextProjects = projects.filter((p: any) => p.id !== id);
@@ -498,7 +514,7 @@ export default function App() {
         {!proj
           ? <Dashboard projects={projects} projectTasks={projectTasks}
               onSelect={(id: number) => { setActiveId(id); setView('gantt'); }}
-              onNew={() => setProjModal('add')} onEdit={(p: any) => setProjModal(p)} onDelete={delProject} />
+              onNew={() => setProjModal('add')} onEdit={(p: any) => setProjModal(p)} onDelete={(p: any) => setDelProjConfirm(p)} />
           : <ProjectPage key={proj.id} project={proj} tasks={tasks} view={view} setView={setView} gRef={gRef} todayX={todayX}
               kpis={[
                 { l: '% Target YTD',      v: `${tgt.toFixed(1)}%`, sub: `as of ${TODAY.toLocaleString('en-US', { month: 'short', year: 'numeric' })}`, c: '#6366F1' },
@@ -515,6 +531,14 @@ export default function App() {
       </div>
       {taskModal && <TaskModal task={taskModal === 'add' ? null : taskModal} onSave={saveTask} onClose={() => setTaskModal(null)} />}
       {projModal && <ProjectModal project={projModal === 'add' ? null : projModal} onSave={saveProject} onClose={() => setProjModal(null)} />}
+      {delProjConfirm && (
+        <ConfirmModal
+          title="Delete Project"
+          message={`Are you sure you want to delete "${delProjConfirm.name}" and all its tasks? This action cannot be undone.`}
+          onConfirm={() => { delProject(delProjConfirm.id); setDelProjConfirm(null); }}
+          onCancel={() => setDelProjConfirm(null)}
+        />
+      )}
     </div>
   );
 }
@@ -674,7 +698,7 @@ function Dashboard({ projects, projectTasks, onSelect, onNew, onEdit, onDelete }
                     </div>
                     <div style={{ display: 'flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
                       <button onClick={() => onEdit(p)} style={{ ...T.btnGhost, padding: '4px 9px', fontSize: 11 }}>Edit</button>
-                      <button onClick={() => onDelete(p.id)} style={{ background: '#FEF2F2', color: '#EF4444', border: '1px solid #FECACA', borderRadius: 8, padding: '4px 9px', cursor: 'pointer', fontSize: 11 }}>Del</button>
+                      <button onClick={() => onDelete(p)} style={{ background: '#FEF2F2', color: '#EF4444', border: '1px solid #FECACA', borderRadius: 8, padding: '4px 9px', cursor: 'pointer', fontSize: 11 }}>Del</button>
                     </div>
                   </div>
                   {p.description && <div style={{ fontSize: 12, color: T.muted, marginBottom: 14, lineHeight: 1.5 }}>{p.description}</div>}
@@ -808,7 +832,7 @@ function ProjectPage({ project, tasks, view, setView, gRef, todayX, kpis, onAdd,
 // ── Gantt ─────────────────────────────────────────────────────────────
 function GanttView({ tasks, todayX, gRef, onEdit, onDel, onReorder }: any) {
   const RH = 52, HH = 52;
-  const [pendingDel, setPendingDel] = useState<number | null>(null);
+  const [pendingDel, setPendingDel] = useState<any | null>(null);
   const [dragId, setDragId]     = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
 
@@ -879,7 +903,6 @@ function GanttView({ tasks, todayX, gRef, onEdit, onDel, onReorder }: any) {
             const sc = SC[getStatus(t)];
             const isDragging  = dragId === t.id;
             const isDragOver  = dragOverId === t.id && dragId !== t.id;
-            const isConfirming = pendingDel === t.id;
             return (
               <div key={t.id}
                 draggable
@@ -892,18 +915,8 @@ function GanttView({ tasks, todayX, gRef, onEdit, onDel, onReorder }: any) {
                 <div style={{ width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'grab', color: T.faint, fontSize: 13, userSelect: 'none' }}>⠿</div>
                 {/* Edit / Delete */}
                 <div style={{ width: 52, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, flexShrink: 0 }}>
-                  {isConfirming ? (
-                    <>
-                      <span style={{ fontSize: 10, color: '#EF4444', fontWeight: 700, marginRight: 2 }}>Delete?</span>
-                      <button onClick={() => { onDel(t.id); setPendingDel(null); }} style={{ background: '#EF4444', color: '#fff', border: 'none', borderRadius: 5, padding: '3px 6px', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>✓</button>
-                      <button onClick={() => setPendingDel(null)} style={{ background: '#F1F5F9', color: T.muted, border: 'none', borderRadius: 5, padding: '3px 6px', cursor: 'pointer', fontSize: 11 }}>✗</button>
-                    </>
-                  ) : (
-                    <>
-                      <button onClick={() => onEdit(t)} style={{ background: '#EEF2FF', color: T.accent, border: 'none', borderRadius: 5, padding: '3px 6px', cursor: 'pointer', fontSize: 11 }}>✏</button>
-                      <button onClick={() => setPendingDel(t.id)} style={{ background: '#FEF2F2', color: '#EF4444', border: 'none', borderRadius: 5, padding: '3px 6px', cursor: 'pointer', fontSize: 11 }}>✕</button>
-                    </>
-                  )}
+                  <button onClick={() => onEdit(t)} style={{ background: '#EEF2FF', color: T.accent, border: 'none', borderRadius: 5, padding: '3px 6px', cursor: 'pointer', fontSize: 11 }}>✏</button>
+                  <button onClick={() => setPendingDel(t)} style={{ background: '#FEF2F2', color: '#EF4444', border: 'none', borderRadius: 5, padding: '3px 6px', cursor: 'pointer', fontSize: 11 }}>✕</button>
                 </div>
                 <div style={{ width: 180, display: 'flex', alignItems: 'center', gap: 7, padding: '0 8px', overflow: 'hidden', flexShrink: 0 }}>
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: sc.dot, flexShrink: 0 }} />
@@ -981,13 +994,21 @@ function GanttView({ tasks, todayX, gRef, onEdit, onDel, onReorder }: any) {
           {tasks.length} tasks · {TL_S.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })} – {TL_E.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
         </span>
       </div>
+      {pendingDel && (
+        <ConfirmModal
+          title="Delete Task"
+          message={`Are you sure you want to delete "${pendingDel.subject}"? This action cannot be undone.`}
+          onConfirm={() => { onDel(pendingDel.id); setPendingDel(null); }}
+          onCancel={() => setPendingDel(null)}
+        />
+      )}
     </div>
   );
 }
 
 // ── List View ─────────────────────────────────────────────────────────
 function ListView({ tasks, onEdit, onDel, onReorder }: any) {
-  const [pendingDel, setPendingDel] = useState<number | null>(null);
+  const [pendingDel, setPendingDel] = useState<any | null>(null);
   const [dragId, setDragId]         = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
 
@@ -1017,7 +1038,6 @@ function ListView({ tasks, onEdit, onDel, onReorder }: any) {
             const st = getStatus(t), sc = SC[st];
             const isDragging   = dragId === t.id;
             const isDragOver   = dragOverId === t.id && dragId !== t.id;
-            const isConfirming = pendingDel === t.id;
             return (
               <tr key={t.id}
                 draggable
@@ -1039,24 +1059,24 @@ function ListView({ tasks, onEdit, onDel, onReorder }: any) {
                 </td>
                 <td style={{ padding: '11px 14px', color: T.muted, whiteSpace: 'nowrap' }}>{t.pic || '–'}</td>
                 <td style={{ padding: '11px 14px', whiteSpace: 'nowrap' }}>
-                  {isConfirming ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <span style={{ fontSize: 11, color: '#EF4444', fontWeight: 700 }}>Delete?</span>
-                      <button onClick={() => { onDel(t.id); setPendingDel(null); }} style={{ background: '#EF4444', color: '#fff', border: 'none', borderRadius: 7, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>✓</button>
-                      <button onClick={() => setPendingDel(null)} style={{ background: '#F1F5F9', color: T.muted, border: 'none', borderRadius: 7, padding: '4px 10px', cursor: 'pointer', fontSize: 11 }}>✗</button>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', gap: 5 }}>
-                      <button onClick={() => onEdit(t)} style={{ background: '#EEF2FF', color: T.accent, border: 'none', borderRadius: 7, padding: '4px 11px', cursor: 'pointer', fontSize: 11 }}>Edit</button>
-                      <button onClick={() => setPendingDel(t.id)} style={{ background: '#FEF2F2', color: '#EF4444', border: 'none', borderRadius: 7, padding: '4px 11px', cursor: 'pointer', fontSize: 11 }}>Del</button>
-                    </div>
-                  )}
+                  <div style={{ display: 'flex', gap: 5 }}>
+                    <button onClick={() => onEdit(t)} style={{ background: '#EEF2FF', color: T.accent, border: 'none', borderRadius: 7, padding: '4px 11px', cursor: 'pointer', fontSize: 11 }}>Edit</button>
+                    <button onClick={() => setPendingDel(t)} style={{ background: '#FEF2F2', color: '#EF4444', border: 'none', borderRadius: 7, padding: '4px 11px', cursor: 'pointer', fontSize: 11 }}>Del</button>
+                  </div>
                 </td>
               </tr>
             );
           })}
         </tbody>
       </table>
+      {pendingDel && (
+        <ConfirmModal
+          title="Delete Task"
+          message={`Are you sure you want to delete "${pendingDel.subject}"? This action cannot be undone.`}
+          onConfirm={() => { onDel(pendingDel.id); setPendingDel(null); }}
+          onCancel={() => setPendingDel(null)}
+        />
+      )}
     </div>
   );
 }
