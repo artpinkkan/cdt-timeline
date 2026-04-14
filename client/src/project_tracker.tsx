@@ -175,9 +175,9 @@ async function buildProjectPDF(project: any, tasks: any[]): Promise<any> {
       else bands.push({ label: lbl, x: wk.x, w: wk.w });
     });
 
-    const BAND_Y  = PAGE_TITLE_H;      // month band starts right after title
+    const BAND_Y  = PAGE_TITLE_H + 4;  // month band — 4mm gap below title bar
     const WEEK_Y  = BAND_Y + 8;        // week row
-    const HDR_BOT = WEEK_Y + 8;        // bottom of header bands = 32
+    const HDR_BOT = WEEK_Y + 8;        // bottom of header bands
     const GAP_H   = 4;                 // breathing room between header and first row
     const ROW_START = HDR_BOT + GAP_H; // y where task rows actually begin
 
