@@ -40,6 +40,8 @@ export async function migrate() {
   // Add plan_start / plan_end to projects if missing (idempotent)
   try { await db.run('ALTER TABLE projects ADD COLUMN plan_start TEXT'); } catch {}
   try { await db.run('ALTER TABLE projects ADD COLUMN plan_end TEXT'); } catch {}
+  // Add strategic_direction to projects if missing (idempotent)
+  try { await db.run('ALTER TABLE projects ADD COLUMN strategic_direction TEXT'); } catch {}
 
   // Create indexes for common query patterns (idempotent)
   await db.exec(`

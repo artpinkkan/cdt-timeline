@@ -39,7 +39,7 @@ router.get('/projects/:id', requireAuth, async (req: AuthRequest, res) => {
 
 // POST create a new project
 router.post('/projects', requireAuth, async (req: AuthRequest, res) => {
-  const { name, irCode, description, color, planStart, planEnd } = req.body;
+  const { name, irCode, description, color, planStart, planEnd, strategicDirection } = req.body;
 
   if (!name) {
     return res.status(400).json({ error: 'Project name is required' });
@@ -48,15 +48,15 @@ router.post('/projects', requireAuth, async (req: AuthRequest, res) => {
   try {
     const now = new Date().toISOString();
     const result = await db.run(
-      'INSERT INTO projects (user_id, name, ir_code, description, color, plan_start, plan_end, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [req.userId, name, irCode || null, description || null, color || '#3B82F6', planStart || null, planEnd || null, now]
+      'INSERT INTO projects (user_id, name, ir_code, description, color, plan_start, plan_end, strategic_direction, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [req.userId, name, irCode || null, description || null, color || '#3B82F6', planStart || null, planEnd || null, strategicDirection || null, now]
     );
 
     res.status(201).json({
       id: result.lastID, user_id: req.userId, name,
       ir_code: irCode || null, description: description || null,
       color: color || '#3B82F6', plan_start: planStart || null,
-      plan_end: planEnd || null, created_at: now,
+      plan_end: planEnd || null, strategic_direction: strategicDirection || null, created_at: now,
     });
   } catch (error) {
     console.error('Create project error:', error);
@@ -68,7 +68,7 @@ router.post('/projects', requireAuth, async (req: AuthRequest, res) => {
 router.put('/projects/:id', requireAuth, async (req: AuthRequest, res) => {
   try {
     const projectId = parseInt(req.params.id);
-    const { name, irCode, description, color, planStart, planEnd } = req.body;
+    const { name, irCode, description, color, planStart, planEnd, strategicDirection } = req.body;
 
     const project = await verifyProjectOwnership(projectId, req.userId!);
     if (!project) {
@@ -80,14 +80,15 @@ router.put('/projects/:id', requireAuth, async (req: AuthRequest, res) => {
     }
 
     await db.run(
-      'UPDATE projects SET name = ?, ir_code = ?, description = ?, color = ?, plan_start = ?, plan_end = ? WHERE id = ?',
-      [name, irCode || null, description || null, color || '#3B82F6', planStart || null, planEnd || null, projectId]
+      'UPDATE projects SET name = ?, ir_code = ?, description = ?, color = ?, plan_start = ?, plan_end = ?, strategic_direction = ? WHERE id = ?',
+      [name, irCode || null, description || null, color || '#3B82F6', planStart || null, planEnd || null, strategicDirection || null, projectId]
     );
 
     res.json({
       ...project,
       name, ir_code: irCode || null, description: description || null,
       color: color || '#3B82F6', plan_start: planStart || null, plan_end: planEnd || null,
+      strategic_direction: strategicDirection || null,
     });
   } catch (error) {
     console.error('Update project error:', error);
