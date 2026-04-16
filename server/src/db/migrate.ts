@@ -20,6 +20,7 @@ export async function migrate() {
       color TEXT NOT NULL DEFAULT '#3B82F6',
       plan_start TEXT,
       plan_end TEXT,
+      strategic_direction TEXT,
       created_at TEXT NOT NULL
     );
 
