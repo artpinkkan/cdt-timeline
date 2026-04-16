@@ -160,15 +160,14 @@ async function buildProjectPDF(project: any, tasks: any[], kpis: any[]): Promise
   const stClr: any = { Done: [16, 185, 129], Delayed: [239, 68, 68], 'In Progress': [99, 102, 241], Overdue: [245, 158, 11], Planned: [107, 114, 128] };
   (doc as any).autoTable({
     startY: 58,
-    head: [['#', 'Task Subject', '✓', 'Status', 'Plan Start', 'Plan End', 'Act. Start', 'Act. End', 'PIC']],
-    body: tasks.map((t, i) => [i + 1, t.subject, t.actEnd ? '✓' : '', getStatus(t), fmt(t.planStart), fmt(t.planEnd), fmt(t.actStart), fmt(t.actEnd), t.pic || '–']),
+    head: [['#', 'Task Subject', 'Status', 'Plan Start', 'Plan End', 'Act. Start', 'Act. End', 'PIC']],
+    body: tasks.map((t, i) => [i + 1, t.subject, getStatus(t), fmt(t.planStart), fmt(t.planEnd), fmt(t.actStart), fmt(t.actEnd), t.pic || '–']),
     headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8, fontStyle: 'bold' },
     bodyStyles: { fontSize: 7.5, textColor: [30, 41, 59] },
     alternateRowStyles: { fillColor: [248, 250, 252] },
-    columnStyles: { 0: { cellWidth: 8 }, 2: { cellWidth: 8, halign: 'center' }, 3: { cellWidth: 24 }, 4: { cellWidth: 22 }, 5: { cellWidth: 22 }, 6: { cellWidth: 22 }, 7: { cellWidth: 22 }, 8: { cellWidth: 20 } },
+    columnStyles: { 0: { cellWidth: 8 }, 2: { cellWidth: 26 }, 3: { cellWidth: 22 }, 4: { cellWidth: 22 }, 5: { cellWidth: 22 }, 6: { cellWidth: 22 }, 7: { cellWidth: 20 } },
     didParseCell(data: any) {
-      if (data.section === 'body' && data.column.index === 3) { const c = stClr[data.cell.raw] || [0, 0, 0]; data.cell.styles.textColor = c; data.cell.styles.fontStyle = 'bold'; }
-      if (data.section === 'body' && data.column.index === 2) { data.cell.styles.textColor = data.cell.raw === '✓' ? [16, 185, 129] : [203, 213, 225]; data.cell.styles.fontStyle = 'bold'; data.cell.styles.fontSize = 10; }
+      if (data.section === 'body' && data.column.index === 2) { const c = stClr[data.cell.raw] || [0, 0, 0]; data.cell.styles.textColor = c; data.cell.styles.fontStyle = 'bold'; }
     },
     margin: { left: 14, right: 14 },
   });
@@ -374,39 +373,134 @@ async function exportAllPDF(projects: any[], projectTasks: Record<number, any[]>
   await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js');
   const { jsPDF } = (window as any).jspdf;
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  const allTasks = Object.values(projectTasks).flat();
-  const totalDone = allTasks.filter((t: any) => t.actEnd).length;
-  const overallPct = allTasks.length ? Math.round((totalDone / allTasks.length) * 100) : 0;
-  doc.setFillColor(15, 23, 42); doc.rect(0, 0, 297, 32, 'F');
-  doc.setTextColor(255, 255, 255); doc.setFontSize(15); doc.setFont('helvetica', 'bold');
-  doc.text('FinalPush.io — All Projects Report', 14, 13);
-  doc.setFontSize(8.5); doc.setFont('helvetica', 'normal');
-  doc.text(`Generated: ${new Date().toLocaleDateString('en-GB')}   |   ${projects.length} projects   |   ${totalDone}/${allTasks.length} tasks done (${overallPct}%)`, 14, 23);
-  [{ l: 'Total Projects', v: String(projects.length) }, { l: 'Total Tasks', v: String(allTasks.length) }, { l: 'Tasks Done', v: String(totalDone) }, { l: 'Overall Progress', v: `${overallPct}%` }]
-    .forEach(({ l, v }, i) => {
-      const kx = 14 + i * 64;
-      doc.setFillColor(241, 245, 249); doc.roundedRect(kx, 36, 60, 18, 2, 2, 'F');
-      doc.setTextColor(148, 163, 184); doc.setFontSize(7); doc.text(l.toUpperCase(), kx + 4, 42);
-      doc.setTextColor(15, 23, 42); doc.setFontSize(13); doc.setFont('helvetica', 'bold'); doc.text(v, kx + 4, 51);
-      doc.setFont('helvetica', 'normal');
-    });
+  const PW = 297, PH = 210;
+
+  const hex2rgb = (hex: string): [number, number, number] => {
+    const h = hex.replace('#', '');
+    return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
+  };
+
+  // ── Compute overall KPIs ──────────────────────────────────────────────
+  const allTasks = Object.values(projectTasks).flat() as any[];
+  const N = allTasks.length;
+  const totalDone   = allTasks.filter((t: any) => t.actEnd).length;
+  const totalTgtDue = allTasks.filter((t: any) => t.planEnd && new Date(t.planEnd) <= TODAY).length;
+  const actPct = N ? (totalDone / N) * 100 : 0;
+  const tgtPct = N ? (totalTgtDue / N) * 100 : 0;
+  const achPct = tgtPct > 0 ? (actPct / tgtPct) * 100 : actPct > 0 ? 100 : 0;
+
+  const statusTotals: Record<string, number> = { Done: 0, 'In Progress': 0, Overdue: 0, Planned: 0 };
+  allTasks.forEach((t: any) => { const s = getStatus(t); if (s in statusTotals) statusTotals[s]++; });
+
+  // ── Header (compact) ─────────────────────────────────────────────────
+  doc.setFillColor(15, 23, 42); doc.rect(0, 0, PW, 15, 'F');
+  doc.setTextColor(255, 255, 255); doc.setFontSize(11); doc.setFont('helvetica', 'bold');
+  doc.text('All Projects Report', 14, 7);
+  doc.setFontSize(7); doc.setFont('helvetica', 'normal');
+  doc.text(
+    `Generated: ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}  ·  ${projects.length} projects  ·  ${N} tasks  ·  ${totalDone} completed`,
+    PW - 14, 7, { align: 'right' }
+  );
+
+  // ── 5 KPI summary cards (compact) ────────────────────────────────────
+  const CARD_Y = 18, CARD_H = 14, CARD_GAP = 2.5;
+  const CARD_W = (PW - 28 - CARD_GAP * 4) / 5;
+  const summaryKpis = [
+    { l: 'Total Projects',    v: String(projects.length),           sub: `${N} total tasks`,                    c: '#6366F1' },
+    { l: '% Target YTD',      v: N ? `${tgtPct.toFixed(1)}%` : '–', sub: `${totalTgtDue}/${N} tasks due today`, c: '#8B5CF6' },
+    { l: '% Actual YTD',      v: N ? `${actPct.toFixed(1)}%` : '–', sub: `${totalDone}/${N} tasks completed`,   c: '#10B981' },
+    { l: '% Achievement YTD', v: N ? `${achPct.toFixed(1)}%` : '–', sub: 'Actual ÷ Target',                    c: achPct < 80 ? '#EF4444' : '#10B981' },
+    { l: 'Tasks Overdue',     v: String(statusTotals['Overdue']),    sub: `${statusTotals['In Progress']} in progress`, c: '#EF4444' },
+  ];
+  summaryKpis.forEach((k, ki) => {
+    const kx = 14 + ki * (CARD_W + CARD_GAP);
+    const [r, g, b] = hex2rgb(k.c);
+    doc.setFillColor(248, 250, 252); doc.roundedRect(kx, CARD_Y, CARD_W, CARD_H, 1, 1, 'F');
+    doc.setFillColor(r, g, b); doc.roundedRect(kx, CARD_Y, 1.8, CARD_H, 0.5, 0.5, 'F');
+    doc.setTextColor(148, 163, 184); doc.setFontSize(5); doc.setFont('helvetica', 'bold');
+    doc.text(k.l.toUpperCase(), kx + 3.5, CARD_Y + 4);
+    doc.setTextColor(r, g, b); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+    doc.text(k.v, kx + 3.5, CARD_Y + 10);
+    doc.setTextColor(148, 163, 184); doc.setFontSize(5); doc.setFont('helvetica', 'normal');
+    doc.text(k.sub, kx + 3.5, CARD_Y + 13.5);
+  });
+
+  // ── Project summary table ─────────────────────────────────────────────
+  const stClr: any = { Done: [16,185,129], 'In Progress': [99,102,241], Overdue: [239,68,68], Planned: [107,114,128] };
+  const tableBody = projects.map((p, i) => {
+    const pt = (projectTasks[p.id] || []) as any[];
+    const pN = pt.length;
+    const pDone    = pt.filter((t: any) => t.actEnd).length;
+    const pTgtDue  = pt.filter((t: any) => t.planEnd && new Date(t.planEnd) <= TODAY).length;
+    const pActPct  = pN ? (pDone / pN) * 100 : 0;
+    const pTgtPct  = pN ? (pTgtDue / pN) * 100 : 0;
+    const pAchPct  = pTgtPct > 0 ? (pActPct / pTgtPct) * 100 : pActPct > 0 ? 100 : 0;
+    const pEnd     = p.plan_end ? new Date(p.plan_end).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : '–';
+    const pCounts: Record<string,number> = { Done:0,'In Progress':0,Overdue:0,Planned:0 };
+    pt.forEach((t: any) => { const s = getStatus(t); if (s in pCounts) pCounts[s]++; });
+    return [
+      i + 1,
+      p.name,
+      p.irCode || '–',
+      pN,
+      `${pTgtPct.toFixed(0)}%`,
+      `${pActPct.toFixed(0)}%`,
+      `${pAchPct.toFixed(0)}%`,
+      pCounts['Done'],
+      pCounts['In Progress'],
+      pCounts['Overdue'],
+      pEnd,
+    ];
+  });
+
   (doc as any).autoTable({
-    startY: 60,
-    head: [['#', 'Project Name', 'Description', 'Tasks', 'Done', 'Progress']],
-    body: projects.map((p, i) => { const pt = projectTasks[p.id] || []; const dn = pt.filter((t: any) => t.actEnd).length; const pct = pt.length ? Math.round((dn / pt.length) * 100) : 0; return [i + 1, p.name, p.description || '–', pt.length, dn, `${pct}%`]; }),
-    headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8, fontStyle: 'bold' },
-    bodyStyles: { fontSize: 7.5, textColor: [30, 41, 59] },
+    startY: 35,
+    head: [['#', 'Project Name', 'IR Code', 'Tasks', 'Target%', 'Actual%', 'Achiev%', 'Done', 'Active', 'Overdue', 'Plan End']],
+    body: tableBody,
+    headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 7, fontStyle: 'bold', cellPadding: 1.5 },
+    bodyStyles: { fontSize: 7, textColor: [30, 41, 59], cellPadding: 1.5 },
     alternateRowStyles: { fillColor: [248, 250, 252] },
-    columnStyles: { 0: { cellWidth: 10 }, 2: { cellWidth: 90 }, 3: { cellWidth: 16, halign: 'center' }, 4: { cellWidth: 16, halign: 'center' }, 5: { cellWidth: 22, halign: 'center' } },
+    columnStyles: {
+      0:  { cellWidth: 8,  halign: 'center' },
+      2:  { cellWidth: 22 },
+      3:  { cellWidth: 14, halign: 'center' },
+      4:  { cellWidth: 18, halign: 'center' },
+      5:  { cellWidth: 18, halign: 'center' },
+      6:  { cellWidth: 18, halign: 'center' },
+      7:  { cellWidth: 14, halign: 'center' },
+      8:  { cellWidth: 14, halign: 'center' },
+      9:  { cellWidth: 16, halign: 'center' },
+      10: { cellWidth: 20, halign: 'center' },
+    },
+    didParseCell(data: any) {
+      if (data.section !== 'body') return;
+      // Color % Achievement column
+      if (data.column.index === 6) {
+        const val = parseFloat(data.cell.raw);
+        data.cell.styles.textColor = val < 80 ? [239,68,68] : [16,185,129];
+        data.cell.styles.fontStyle = 'bold';
+      }
+      // Color Overdue column
+      if (data.column.index === 9 && Number(data.cell.raw) > 0) {
+        data.cell.styles.textColor = [239,68,68];
+        data.cell.styles.fontStyle = 'bold';
+      }
+      // Color Done column
+      if (data.column.index === 7 && Number(data.cell.raw) > 0) {
+        data.cell.styles.textColor = [16,185,129];
+      }
+    },
     margin: { left: 14, right: 14 },
   });
+
+  // ── Footer ────────────────────────────────────────────────────────────
   const pages = doc.internal.getNumberOfPages();
   for (let i = 1; i <= pages; i++) {
     doc.setPage(i); doc.setFontSize(7); doc.setTextColor(148, 163, 184);
-    doc.text(`FinalPush.io — Page ${i} of ${pages}`, 14, doc.internal.pageSize.height - 6);
-    doc.text('Generated by FinalPush.io', 297 - 14, doc.internal.pageSize.height - 6, { align: 'right' });
+    doc.text(`All Projects Report — Page ${i} of ${pages}`, 14, PH - 6);
+    doc.text(`Generated ${new Date().toLocaleDateString('en-GB')}`, PW - 14, PH - 6, { align: 'right' });
   }
-  doc.save('FinalPush_All_Projects.pdf');
+  doc.save(`All_Projects_Report_${new Date().toISOString().slice(0,10)}.pdf`);
 }
 
 // ── App ───────────────────────────────────────────────────────────────
@@ -419,7 +513,6 @@ function AppInner() {
   const [taskModal, setTaskModal] = useState<any>(null);
   const [projModal, setProjModal] = useState<any>(null);
   const [delProjConfirm, setDelProjConfirm] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [actMonth, setActMonth] = useState('');
   const [tgtMonth, setTgtMonth] = useState('');
@@ -434,22 +527,30 @@ function AppInner() {
         const { projects: cp, projectTasks: ct } = JSON.parse(cached);
         setProjects(cp);
         setProjectTasks(ct);
-        setLoading(false);
       }
     } catch {}
 
     (async () => {
       try {
         const projs = await projectsApi.list();
+        // Apply saved sort order from localStorage
+        const savedOrder: number[] = JSON.parse(localStorage.getItem('fp_proj_order') || '[]');
+        if (savedOrder.length) {
+          projs.sort((a: any, b: any) => {
+            const ai = savedOrder.indexOf(a.id), bi = savedOrder.indexOf(b.id);
+            return (ai === -1 ? 9999 : ai) - (bi === -1 ? 9999 : bi);
+          });
+        }
         setProjects(projs);
-        // Fetch all project tasks in parallel
-        const results = await Promise.all(projs.map((p: any) => tasksApi.list(p.id)));
+        // Fetch all project tasks in parallel — allSettled so a slow/failed project doesn't block others
+        const results = await Promise.allSettled(projs.map((p: any) => tasksApi.list(p.id)));
         const pt: Record<number, any[]> = {};
-        projs.forEach((p: any, i: number) => { pt[p.id] = results[i]; });
+        projs.forEach((p: any, i: number) => {
+          pt[p.id] = results[i].status === 'fulfilled' ? (results[i] as PromiseFulfilledResult<any[]>).value : (projectTasks[p.id] || []);
+        });
         setProjectTasks(pt);
-        localStorage.setItem('fp_cache', JSON.stringify({ projects: projs, projectTasks: pt }));
+        try { localStorage.setItem('fp_cache', JSON.stringify({ projects: projs, projectTasks: pt })); } catch {}
       } catch (e) { console.error(e); }
-      finally { setLoading(false); }
     })();
   }, []);
 
@@ -457,8 +558,9 @@ function AppInner() {
   const tasks = activeId ? projectTasks[activeId] || [] : [];
 
   const allDates = tasks.flatMap((t: any) => [t.planStart, t.planEnd, t.actStart, t.actEnd].filter(Boolean));
-  const minDate = allDates.length ? new Date(Math.min(...allDates.map((d: string) => new Date(d).getTime()))) : new Date(2026, 0, 1);
-  const maxDate = allDates.length ? new Date(Math.max(...allDates.map((d: string) => new Date(d).getTime()))) : new Date(2027, 11, 31);
+  const validDates = allDates.filter((d: string) => { const t = new Date(d).getTime(); return !isNaN(t) && new Date(d).getFullYear() < 2100; });
+  const minDate = validDates.length ? new Date(Math.min(...validDates.map((d: string) => new Date(d).getTime()))) : new Date(2026, 0, 1);
+  const maxDate = validDates.length ? new Date(Math.max(...validDates.map((d: string) => new Date(d).getTime()))) : new Date(2027, 11, 31);
   const tlS = new Date(minDate.getTime() - 30 * 86400000), tlE = new Date(maxDate.getTime() + 30 * 86400000);
   const tlDays = (tlE.getTime() - tlS.getTime()) / 86400000;
   const txDay = (ds: string) => (ds ? Math.round(((new Date(ds).getTime() - tlS.getTime()) / 86400000 / tlDays) * TL_W) : null);
@@ -469,13 +571,23 @@ function AppInner() {
   };
 
   const saveProject = async (p: any) => {
+    // Normalize to camelCase (server expects camelCase in body; project objects from server use snake_case)
+    const payload = {
+      name:               p.name,
+      irCode:             p.irCode             ?? p.ir_code             ?? null,
+      description:        p.description        ?? null,
+      color:              p.color              ?? '#3B82F6',
+      planStart:          p.planStart          ?? p.plan_start          ?? null,
+      planEnd:            p.planEnd            ?? p.plan_end            ?? null,
+      strategicDirection: p.strategicDirection ?? p.strategic_direction ?? null,
+    };
     try {
       let nextProjects: any[];
       if (p.id) {
-        const updated = await projectsApi.update(p.id, p); // use server response (snake_case fields)
+        const updated = await projectsApi.update(p.id, payload);
         nextProjects = projects.map((x) => (x.id === p.id ? updated : x));
       } else {
-        const c = await projectsApi.create(p);
+        const c = await projectsApi.create(payload);
         nextProjects = [...projects, c];
         const nextTasks = { ...projectTasks, [c.id]: [] };
         setProjectTasks(nextTasks);
@@ -484,7 +596,10 @@ function AppInner() {
       setProjects(nextProjects);
       updateCache(nextProjects, projectTasks);
       setProjModal(null);
-    } catch (e) { console.error(e); }
+    } catch (e: any) {
+      console.error(e);
+      alert(`Failed to save project: ${e?.message || 'Unknown error'}. Please try again.`);
+    }
   };
   const delProject = async (id: number) => {
     try {
@@ -556,7 +671,8 @@ function AppInner() {
     if (!allDates.length) return [];
     const result: string[] = [];
     let y = minDate.getFullYear(), m = minDate.getMonth();
-    const ey = maxDate.getFullYear(), em = maxDate.getMonth();
+    const ey = Math.min(maxDate.getFullYear(), minDate.getFullYear() + 10); // cap at 10 years to guard bad dates
+    const em = maxDate.getFullYear() > minDate.getFullYear() + 10 ? 11 : maxDate.getMonth();
     while (y < ey || (y === ey && m <= em)) {
       result.push(`${y}-${String(m + 1).padStart(2, '0')}`);
       m++; if (m > 11) { m = 0; y++; }
@@ -596,14 +712,6 @@ function AppInner() {
   const mtd = mtdTarget > 0 ? (mtdActual / mtdTarget) * 100 : 0;
   const mtdLabel = new Date(mtdSelYear, mtdSelMo - 1, 1).toLocaleString('en-US', { month: 'short', year: 'numeric' });
 
-  if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: T.bg, fontFamily: 'system-ui,sans-serif' }}>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ width: 36, height: 36, border: '3px solid #E8ECF4', borderTopColor: T.accent, borderRadius: '50%', margin: '0 auto 12px', animation: 'spin 0.8s linear infinite' }} />
-        <div style={{ color: T.muted, fontSize: 13 }}>Loading…</div>
-      </div>
-    </div>
-  );
 
   const sidebarW = sidebarCollapsed ? 60 : 234;
 
@@ -614,7 +722,11 @@ function AppInner() {
         onSelect={(id: number) => { setActiveId(id); setView('gantt'); setActMonth(''); setTgtMonth(''); setMtdMonthSel(`${TODAY.getFullYear()}-${String(TODAY.getMonth() + 1).padStart(2, '0')}`); }}
         onNew={() => setProjModal('add')}
         collapsed={sidebarCollapsed}
-        onToggle={() => setSidebarCollapsed((c: boolean) => !c)} />
+        onToggle={() => setSidebarCollapsed((c: boolean) => !c)}
+        onReorder={(reordered: any[]) => {
+          setProjects(reordered);
+          localStorage.setItem('fp_proj_order', JSON.stringify(reordered.map((p: any) => p.id)));
+        }} />
       <div style={{ flex: 1, overflow: 'auto', minWidth: 0, marginLeft: sidebarW, transition: 'margin-left 0.22s cubic-bezier(.4,0,.2,1)' }}>
         {!proj
           ? <Dashboard projects={projects} projectTasks={projectTasks}
@@ -655,11 +767,13 @@ function AppInner() {
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────
-function Sidebar({ projects, projectTasks, activeId, user, logout, onDashboard, onSelect, onNew, collapsed, onToggle }: any) {
+function Sidebar({ projects, projectTasks, activeId, user, logout, onDashboard, onSelect, onNew, collapsed, onToggle, onReorder }: any) {
   const totT = projects.reduce((s: number, p: any) => s + (projectTasks[p.id] || []).length, 0);
   const totD = projects.reduce((s: number, p: any) => s + (projectTasks[p.id] || []).filter((t: any) => t.actEnd).length, 0);
   const pct = totT ? Math.round((totD / totT) * 100) : 0;
   const W = collapsed ? 60 : 234;
+  const dragIdx = useRef<number | null>(null);
+  const dragOverIdx = useRef<number | null>(null);
 
   return (
     <div style={{ width: W, flexShrink: 0, position: 'fixed', top: 0, left: 0, height: '100vh', background: T.surface, borderRight: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', zIndex: 100, transition: 'width 0.22s cubic-bezier(.4,0,.2,1)', overflow: 'hidden' }}>
@@ -694,23 +808,47 @@ function Sidebar({ projects, projectTasks, activeId, user, logout, onDashboard, 
         )}
         {collapsed && <div style={{ height: 1, background: T.border, margin: '8px 4px' }} />}
 
-        {projects.map((p: any) => {
+        {projects.map((p: any, idx: number) => {
           const pt = projectTasks[p.id] || [], pd = pt.filter((t: any) => t.actEnd).length, pp = pt.length ? Math.round((pd / pt.length) * 100) : 0, active = activeId === p.id;
+          const handleDrop = () => {
+            if (dragIdx.current === null || dragIdx.current === idx) return;
+            const reordered = [...projects];
+            const [moved] = reordered.splice(dragIdx.current, 1);
+            reordered.splice(idx, 0, moved);
+            dragIdx.current = null; dragOverIdx.current = null;
+            onReorder(reordered);
+          };
           return (
-            <button key={p.id} onClick={() => onSelect(p.id)} title={p.name} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: collapsed ? '9px 0' : '8px 11px', justifyContent: collapsed ? 'center' : 'flex-start', borderRadius: 9, border: 'none', cursor: 'pointer', marginBottom: 2, background: active ? '#EEF2FF' : 'transparent', textAlign: 'left', transition: 'all 0.15s' }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: p.color, flexShrink: 0 }} />
+            <div
+              key={p.id}
+              onDragOver={(e) => { e.preventDefault(); dragOverIdx.current = idx; }}
+              onDrop={handleDrop}
+              onDragEnd={() => { dragIdx.current = null; dragOverIdx.current = null; }}
+              style={{ display: 'flex', alignItems: 'center', marginBottom: 2, borderRadius: 9, background: active ? '#EEF2FF' : 'transparent' }}
+            >
               {!collapsed && (
-                <div style={{ flex: 1, overflow: 'hidden' }}>
-                  <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: active ? T.accent : T.muted, fontSize: 12, fontWeight: active ? 700 : 400 }}>{p.name}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                    <div style={{ flex: 1, height: 3, background: '#F1F5F9', borderRadius: 2 }}>
-                      <div style={{ height: '100%', width: `${pp}%`, background: p.color, borderRadius: 2, transition: 'width 0.3s' }} />
-                    </div>
-                    <span style={{ fontSize: 10, color: T.faint, flexShrink: 0 }}>{pp}%</span>
-                  </div>
-                </div>
+                <span
+                  draggable
+                  onDragStart={(e) => { dragIdx.current = idx; e.dataTransfer.effectAllowed = 'move'; }}
+                  title="Drag to reorder"
+                  style={{ padding: '8px 4px 8px 8px', cursor: 'grab', color: T.faint, fontSize: 11, flexShrink: 0, lineHeight: 1, userSelect: 'none' }}
+                >⠿</span>
               )}
-            </button>
+              <button onClick={() => onSelect(p.id)} title={p.name} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 9, padding: collapsed ? '9px 0' : '8px 8px 8px 4px', justifyContent: collapsed ? 'center' : 'flex-start', borderRadius: 9, border: 'none', cursor: 'pointer', background: 'transparent', textAlign: 'left' }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: p.color, flexShrink: 0 }} />
+                {!collapsed && (
+                  <div style={{ flex: 1, overflow: 'hidden' }}>
+                    <div style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', color: active ? T.accent : T.muted, fontSize: 12, fontWeight: active ? 700 : 400, lineHeight: 1.35 }}>{p.name}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                      <div style={{ flex: 1, height: 3, background: '#F1F5F9', borderRadius: 2 }}>
+                        <div style={{ height: '100%', width: `${pp}%`, background: p.color, borderRadius: 2, transition: 'width 0.3s' }} />
+                      </div>
+                      <span style={{ fontSize: 10, color: T.faint, flexShrink: 0 }}>{pp}%</span>
+                    </div>
+                  </div>
+                )}
+              </button>
+            </div>
           );
         })}
         {projects.length === 0 && !collapsed && <div style={{ color: T.faint, fontSize: 11, padding: '12px', textAlign: 'center' }}>No projects yet</div>}
@@ -1035,10 +1173,113 @@ function OverviewTab({ projects, projectTasks }: any) {
   );
 }
 
+// ── Direction Tab ─────────────────────────────────────────────────────
+function DirectionTab({ projects, projectTasks, onSelect }: any) {
+  // Group projects by strategic_direction
+  const groups: Record<string, any[]> = {};
+  for (const p of projects) {
+    const dir = (p.strategic_direction || '').trim() || 'Unassigned';
+    if (!groups[dir]) groups[dir] = [];
+    groups[dir].push(p);
+  }
+
+  const DIRECTION_COLORS = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#EC4899', '#14B8A6', '#F97316'];
+  const dirNames = Object.keys(groups).sort((a, b) => a === 'Unassigned' ? 1 : b === 'Unassigned' ? -1 : a.localeCompare(b));
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Summary cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 14 }}>
+        {dirNames.map((dir, idx) => {
+          const projs = groups[dir];
+          const allT = projs.flatMap((p: any) => projectTasks[p.id] || []);
+          const done = allT.filter((t: any) => t.actEnd).length;
+          const pct = allT.length ? Math.round((done / allT.length) * 100) : 0;
+          const color = dir === 'Unassigned' ? T.faint : DIRECTION_COLORS[idx % DIRECTION_COLORS.length];
+          return (
+            <div key={dir} style={{ ...T.card, padding: '18px 20px', borderLeft: `4px solid ${color}` }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: T.faint, textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 6 }}>Strategic Direction</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 10, lineHeight: 1.3 }}>{dir}</div>
+              <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
+                <div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color }}>{projs.length}</div>
+                  <div style={{ fontSize: 10, color: T.faint, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Projects</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: T.text }}>{allT.length}</div>
+                  <div style={{ fontSize: 10, color: T.faint, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tasks</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color }}>{pct}%</div>
+                  <div style={{ fontSize: 10, color: T.faint, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Done</div>
+                </div>
+              </div>
+              <div style={{ height: 5, background: '#F1F5F9', borderRadius: 3, marginBottom: 10 }}>
+                <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 3, transition: 'width 0.4s' }} />
+              </div>
+              {/* Status breakdown */}
+              {(() => {
+                const sc: Record<string, number> = { Done: 0, 'In Progress': 0, Overdue: 0, Delayed: 0, Planned: 0 };
+                allT.forEach((t: any) => { const s = getStatus(t); if (s in sc) sc[s]++; });
+                return (
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                    {Object.entries(sc).filter(([, n]) => n > 0).map(([s, n]) => (
+                      <span key={s} style={{ background: SC[s]?.bg, color: SC[s]?.tx, fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 5 }}>
+                        {n} {s === 'In Progress' ? 'Active' : s}
+                      </span>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Per-direction project lists */}
+      {dirNames.map((dir, idx) => {
+        const projs = groups[dir];
+        const color = dir === 'Unassigned' ? T.faint : DIRECTION_COLORS[idx % DIRECTION_COLORS.length];
+        return (
+          <div key={dir} style={{ ...T.card }}>
+            <div style={{ padding: '14px 20px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0 }} />
+              <span style={{ fontWeight: 700, color: T.text, fontSize: 14 }}>{dir}</span>
+              <span style={{ background: `${color}18`, color, fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 6 }}>{projs.length} project{projs.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div style={{ padding: '10px 0' }}>
+              {projs.map((p: any) => {
+                const pt = projectTasks[p.id] || [];
+                const done = pt.filter((t: any) => t.actEnd).length;
+                const pct = pt.length ? Math.round((done / pt.length) * 100) : 0;
+                const overdue = pt.filter((t: any) => getStatus(t) === 'Overdue').length;
+                return (
+                  <div key={p.id} onClick={() => onSelect(p.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 20px', cursor: 'pointer', borderRadius: 8, margin: '0 8px', transition: 'background 0.1s' }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = T.bg; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = ''; }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: p.color, flexShrink: 0 }} />
+                    <span style={{ flex: 1, fontWeight: 600, color: T.text, fontSize: 13 }}>{p.name}</span>
+                    {overdue > 0 && <span style={{ background: SC.Overdue.bg, color: SC.Overdue.tx, fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 5 }}>{overdue} overdue</span>}
+                    <span style={{ fontSize: 12, color: T.muted, minWidth: 40, textAlign: 'right' }}>{pct}%</span>
+                    <div style={{ width: 80, height: 5, background: '#F1F5F9', borderRadius: 3 }}>
+                      <div style={{ height: '100%', width: `${pct}%`, background: p.color, borderRadius: 3 }} />
+                    </div>
+                    <span style={{ color: T.accent, fontSize: 11, fontWeight: 700 }}>Open →</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Dashboard ─────────────────────────────────────────────────────────
 function Dashboard({ projects, projectTasks, onSelect, onNew, onEdit, onDelete }: any) {
-  const [exporting, setExporting] = useState(false);
-  const [dashTab, setDashTab] = useState<'projects' | 'overview'>('projects');
+  const [dashTab, setDashTab] = useState<'projects' | 'overview' | 'direction'>('projects');
   const allTasks = Object.values(projectTasks).flat() as any[];
   const _statusCounts: Record<string, number> = { Done: 0, 'In Progress': 0, Overdue: 0, Planned: 0 };
   allTasks.forEach((t) => { const s = getStatus(t); if (s in _statusCounts) _statusCounts[s]++; });
@@ -1053,8 +1294,8 @@ function Dashboard({ projects, projectTasks, onSelect, onNew, onEdit, onDelete }
           <p style={{ margin: '5px 0 0', color: T.muted, fontSize: 13 }}>{projects.length} project{projects.length !== 1 ? 's' : ''} · {allTasks.length} total tasks</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => { setExporting(true); exportAllPDF(projects, projectTasks).catch(console.error).finally(() => setExporting(false)); }} disabled={exporting} style={{ ...T.btnGhost, opacity: exporting ? 0.5 : 1 }}>
-            {exporting ? 'Exporting…' : '⬇ Export PDF'}
+          <button onClick={() => exportAllPDF(projects, projectTasks).catch(console.error)} style={T.btnGhost}>
+            ⬇ Export PDF
           </button>
           <button onClick={onNew} style={T.btnPrimary}>+ New Project</button>
         </div>
@@ -1062,15 +1303,17 @@ function Dashboard({ projects, projectTasks, onSelect, onNew, onEdit, onDelete }
 
       {/* Tab switcher */}
       <div style={{ display: 'flex', gap: 4, background: T.bg, padding: 4, borderRadius: 11, border: `1px solid ${T.border}`, marginBottom: 20, width: 'fit-content' }}>
-        {(['projects', 'overview'] as const).map((tab) => (
-          <button key={tab} onClick={() => setDashTab(tab)} style={{ padding: '5px 18px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, background: dashTab === tab ? T.surface : 'transparent', color: dashTab === tab ? T.accent : T.muted, fontWeight: dashTab === tab ? 700 : 400, boxShadow: dashTab === tab ? '0 1px 4px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.15s', textTransform: 'capitalize' }}>
-            {tab === 'overview' ? 'Overview' : 'Projects'}
+        {([['projects', 'Projects'], ['overview', 'Overview'], ['direction', 'By Direction']] as const).map(([tab, label]) => (
+          <button key={tab} onClick={() => setDashTab(tab)} style={{ padding: '5px 18px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, background: dashTab === tab ? T.surface : 'transparent', color: dashTab === tab ? T.accent : T.muted, fontWeight: dashTab === tab ? 700 : 400, boxShadow: dashTab === tab ? '0 1px 4px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.15s' }}>
+            {label}
           </button>
         ))}
       </div>
 
       {dashTab === 'overview' ? (
         <OverviewTab projects={projects} projectTasks={projectTasks} />
+      ) : dashTab === 'direction' ? (
+        <DirectionTab projects={projects} projectTasks={projectTasks} onSelect={onSelect} />
       ) : (<>
 
       {/* Stat strip */}
@@ -1110,7 +1353,10 @@ function Dashboard({ projects, projectTasks, onSelect, onNew, onEdit, onDelete }
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
                     <div style={{ flex: 1, marginRight: 8 }}>
                       <div style={{ fontWeight: 700, color: T.text, fontSize: 14, lineHeight: 1.3, marginBottom: 5 }}>{p.name}</div>
-                      <span style={{ background: `${p.color}15`, color: p.color, fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 6 }}>{p.irCode || 'No IR Code'}</span>
+                      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                        <span style={{ background: `${p.color}15`, color: p.color, fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 6 }}>{p.irCode || 'No IR Code'}</span>
+                        {p.strategic_direction && <span style={{ background: '#F0FDF4', color: '#16A34A', fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 6 }}>{p.strategic_direction}</span>}
+                      </div>
                     </div>
                     <div style={{ display: 'flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
                       <button onClick={() => onEdit(p)} style={{ ...T.btnGhost, padding: '4px 9px', fontSize: 11 }}>Edit</button>
@@ -1153,8 +1399,6 @@ function Dashboard({ projects, projectTasks, onSelect, onNew, onEdit, onDelete }
 // ── Project Page ──────────────────────────────────────────────────────
 function ProjectPage({ project, tasks, view, setView, gRef, todayX, kpis, actMonth, setActMonth, tgtMonth, setTgtMonth, mtdMonthSel, setMtdMonthSel, projectMonthRange, onAdd, onEditTask, onDelTask, onReorderTasks, onEditProject, onGoToToday, onGenTasks, onInlineSave, onSyncUpload }: any) {
   const [showIR, setShowIR] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState('');
   const uploadRef = useRef<HTMLInputElement>(null);
 
@@ -1218,14 +1462,14 @@ function ProjectPage({ project, tasks, view, setView, gRef, todayX, kpis, actMon
       );
       if (!ok) return;
 
-      setSyncing(true); setSyncMsg('');
+      setSyncMsg('');
       const result = await onSyncUpload(parsed);
       setSyncMsg(result);
       setTimeout(() => setSyncMsg(''), 4000);
     } catch (err) {
       console.error(err);
       alert('Failed to read file. Make sure it uses the correct template.');
-    } finally { setSyncing(false); }
+    }
   };
 
   return (
@@ -1260,15 +1504,21 @@ function ProjectPage({ project, tasks, view, setView, gRef, todayX, kpis, actMon
             ))}
           </div>
         </div>
-        {project.irCode && (
-          <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {project.irCode && (<>
             <button onClick={() => setShowIR((x: boolean) => !x)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', borderRadius: 20, border: `1px solid ${showIR ? T.accent + '55' : T.border}`, background: showIR ? '#EEF2FF' : 'transparent', cursor: 'pointer', fontSize: 11, fontWeight: 700, color: showIR ? T.accent : T.muted }}>
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: showIR ? T.accent : T.faint, display: 'inline-block' }} />
               IR Context
             </button>
             {showIR && <span style={{ background: '#EEF2FF', border: `1px solid ${T.accent}33`, borderRadius: 8, padding: '4px 14px', fontSize: 12, fontWeight: 700, color: T.accent }}>{project.irCode}</span>}
-          </div>
-        )}
+          </>)}
+          {project.strategic_direction && (
+            <span style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 20, padding: '4px 14px', fontSize: 11, fontWeight: 700, color: '#16A34A', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16A34A', display: 'inline-block' }} />
+              {project.strategic_direction}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* KPI strip */}
@@ -1308,24 +1558,17 @@ function ProjectPage({ project, tasks, view, setView, gRef, todayX, kpis, actMon
         <button onClick={onAdd} style={T.btnPrimary}>+ Add Task</button>
         {view === 'gantt' && <button onClick={onGoToToday} style={T.btnGhost}>Go to Today</button>}
         <button onClick={() => {
-          setExporting(true);
           buildProjectPDF(project, tasks, kpis)
             .then(doc => {
               const url = URL.createObjectURL(doc.output('blob'));
               window.open(url, '_blank');
               setTimeout(() => URL.revokeObjectURL(url), 10000);
             })
-            .catch(console.error)
-            .finally(() => setExporting(false));
-        }} disabled={exporting} style={{ ...T.btnGhost, opacity: exporting ? 0.5 : 1 }}>
-          {exporting ? 'Building PDF…' : '⬇ Export PDF'}
-        </button>
+            .catch(console.error);
+        }} style={T.btnGhost}>⬇ Export PDF</button>
         <button onClick={downloadTemplate} style={T.btnGhost}>⬇ Template</button>
         <input ref={uploadRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleUploadFile} />
-        <button onClick={() => uploadRef.current?.click()} disabled={syncing}
-          style={{ ...T.btnGhost, opacity: syncing ? 0.6 : 1 }}>
-          {syncing ? 'Syncing…' : '⬆ Upload'}
-        </button>
+        <button onClick={() => uploadRef.current?.click()} style={T.btnGhost}>⬆ Upload</button>
         {syncMsg && <span style={{ fontSize: 11, color: '#10B981', fontWeight: 600 }}>{syncMsg}</span>}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 14, alignItems: 'center', fontSize: 11, color: T.muted }}>
           {[['#BFDBFE', 'Planned'], ['#A7F3D0', 'Actual'], ['#FCA5A5', 'Delayed'], ['#EF4444', 'Today']].map(([c, l]) => (
@@ -1359,6 +1602,11 @@ function GanttView({ tasks, todayX, gRef, onEdit, onDel, onReorder, onInlineSave
   const [dragId, setDragId]         = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
   const [editCell, setEditCell]     = useState<{ taskId: number; field: string; value: string } | null>(null);
+  const [tooltip, setTooltip]       = useState<{ text: string; x: number; y: number } | null>(null);
+  const [subjectColW, setSubjectColW] = useState(180);
+  const resizingRef = useRef<{ startX: number; startW: number } | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const mouseXRef = useRef(0);
 
   const startEdit = (e: React.MouseEvent, taskId: number, field: string, value: string) => {
     e.stopPropagation();
@@ -1389,19 +1637,43 @@ function GanttView({ tasks, todayX, gRef, onEdit, onDel, onReorder, onInlineSave
   };
 
   const COLS = [
-    { k: 'drag',      l: '',             w: 24  },
-    { k: 'actions',   l: '',             w: 52  },
-    { k: 'subject',   l: 'Task Subject', w: 180 },
-    { k: 'planStart', l: 'Plan\nStart',  w: 88  },
-    { k: 'planEnd',   l: 'Plan\nEnd',    w: 88  },
-    { k: 'actStart',  l: 'Act.\nStart',  w: 88  },
-    { k: 'actEnd',    l: 'Act.\nEnd',    w: 88  },
-    { k: 'pic',       l: 'PIC',          w: 68  },
+    { k: 'drag',      l: '',             w: 24           },
+    { k: 'actions',   l: '',             w: 52           },
+    { k: 'subject',   l: 'Task Subject', w: subjectColW  },
+    { k: 'planStart', l: 'Plan\nStart',  w: 88           },
+    { k: 'planEnd',   l: 'Plan\nEnd',    w: 88           },
+    { k: 'actStart',  l: 'Act.\nStart',  w: 88           },
+    { k: 'actEnd',    l: 'Act.\nEnd',    w: 88           },
+    { k: 'pic',       l: 'PIC',          w: 68           },
   ];
 
+  const startResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    resizingRef.current = { startX: e.clientX, startW: subjectColW };
+    const onMove = (ev: MouseEvent) => {
+      if (!resizingRef.current) return;
+      mouseXRef.current = ev.clientX;
+      if (rafRef.current !== null) return; // already a frame pending — skip
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        if (!resizingRef.current) return;
+        const newW = Math.max(120, resizingRef.current.startW + mouseXRef.current - resizingRef.current.startX);
+        setSubjectColW(newW);
+      });
+    };
+    const onUp = () => {
+      resizingRef.current = null;
+      if (rafRef.current !== null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+      window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
   const allDates = tasks.flatMap((t: any) => [t.planStart, t.planEnd, t.actStart, t.actEnd].filter(Boolean));
-  const minDate = allDates.length ? new Date(Math.min(...allDates.map((d: string) => new Date(d).getTime()))) : new Date(2026, 0, 1);
-  const maxDate = allDates.length ? new Date(Math.max(...allDates.map((d: string) => new Date(d).getTime()))) : new Date(2027, 11, 31);
+  const validDates = allDates.filter((d: string) => { const t = new Date(d).getTime(); return !isNaN(t) && new Date(d).getFullYear() < 2100; });
+  const minDate = validDates.length ? new Date(Math.min(...validDates.map((d: string) => new Date(d).getTime()))) : new Date(2026, 0, 1);
+  const maxDate = validDates.length ? new Date(Math.max(...validDates.map((d: string) => new Date(d).getTime()))) : new Date(2027, 11, 31);
   const TL_S = new Date(minDate.getTime() - 14 * 86400000), TL_E = new Date(maxDate.getTime() + 14 * 86400000);
   const TL_DAYS = (TL_E.getTime() - TL_S.getTime()) / 86400000;
   const d2x = (ds: string) => (ds ? Math.round(((new Date(ds).getTime() - TL_S.getTime()) / 86400000 / TL_DAYS) * TL_W) : null);
@@ -1435,7 +1707,15 @@ function GanttView({ tasks, todayX, gRef, onEdit, onDel, onReorder, onInlineSave
           {/* Header — spans both sub-rows */}
           <div style={{ display: 'flex', height: HH, background: '#FAFBFF', borderBottom: `1px solid ${T.border}`, borderRight: `2px solid ${T.border}` }}>
             {COLS.map((c) => (
-              <div key={c.k} style={{ width: c.w, padding: '0 8px', display: 'flex', alignItems: 'center', justifyContent: c.k === 'actions' ? 'center' : 'flex-start', flexShrink: 0, fontSize: 10, fontWeight: 700, color: T.faint, textTransform: 'uppercase', letterSpacing: '0.4px', lineHeight: 1.3, whiteSpace: 'pre-line' }}>{c.l}</div>
+              <div key={c.k} style={{ width: c.w, padding: '0 8px', display: 'flex', alignItems: 'center', justifyContent: c.k === 'actions' ? 'center' : 'flex-start', flexShrink: 0, fontSize: 10, fontWeight: 700, color: T.faint, textTransform: 'uppercase', letterSpacing: '0.4px', lineHeight: 1.3, whiteSpace: 'pre-line', position: 'relative' }}>
+                {c.l}
+                {c.k === 'subject' && (
+                  <div onMouseDown={startResize}
+                    style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 6, cursor: 'col-resize', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ width: 2, height: 18, background: T.border, borderRadius: 1 }} />
+                  </div>
+                )}
+              </div>
             ))}
           </div>
 
@@ -1448,7 +1728,7 @@ function GanttView({ tasks, todayX, gRef, onEdit, onDel, onReorder, onInlineSave
               <div key={t.id}
                 draggable={editCell?.taskId !== t.id}
                 onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; setDragId(t.id); }}
-                onDragOver={(e) => { e.preventDefault(); setDragOverId(t.id); }}
+                onDragOver={(e) => { e.preventDefault(); if (dragOverId !== t.id) setDragOverId(t.id); }}
                 onDrop={() => handleDrop(t.id)}
                 onDragEnd={() => { setDragId(null); setDragOverId(null); }}
                 style={{ display: 'flex', height: RH, borderBottom: `1px solid ${T.border}`, borderRight: `2px solid ${T.border}`, background: isDragOver ? '#EEF2FF' : editCell?.taskId === t.id ? '#F5F7FF' : i % 2 === 0 ? '#fff' : '#FAFBFF', opacity: isDragging ? 0.4 : 1, transition: 'background 0.1s' }}>
@@ -1460,7 +1740,7 @@ function GanttView({ tasks, todayX, gRef, onEdit, onDel, onReorder, onInlineSave
                   <button onClick={() => setPendingDel(t)} style={{ background: '#FEF2F2', color: '#EF4444', border: 'none', borderRadius: 5, padding: '3px 6px', cursor: 'pointer', fontSize: 11 }}>✕</button>
                 </div>
                 {/* Subject */}
-                <div style={{ width: 180, display: 'flex', alignItems: 'center', gap: 7, padding: '0 8px', overflow: 'hidden', flexShrink: 0 }}>
+                <div style={{ width: subjectColW, display: 'flex', alignItems: 'center', gap: 7, padding: '0 8px', overflow: 'hidden', flexShrink: 0 }}>
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: sc.dot, flexShrink: 0 }} />
                   {isEditing(t.id, 'subject')
                     ? <input autoFocus type="text" value={editCell!.value}
@@ -1469,7 +1749,14 @@ function GanttView({ tasks, todayX, gRef, onEdit, onDel, onReorder, onInlineSave
                         onKeyDown={e => { if (e.key === 'Enter') commitEdit(t); if (e.key === 'Escape') cancelEdit(); e.stopPropagation(); }}
                         style={{ ...inputStyle, flex: 1, minWidth: 0, fontSize: 12 }} />
                     : <span onDoubleClick={e => startEdit(e, t.id, 'subject', t.subject)}
-                        title="Double-click to edit"
+                        onMouseEnter={e => {
+                          const el = e.currentTarget;
+                          if (el.scrollWidth > el.clientWidth) {
+                            const r = el.getBoundingClientRect();
+                            setTooltip({ text: t.subject, x: r.left, y: r.bottom + 6 });
+                          }
+                        }}
+                        onMouseLeave={() => setTooltip(null)}
                         style={{ fontSize: 12, color: t.actEnd ? T.faint : T.text, textDecoration: t.actEnd ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0, cursor: 'text' }}>
                         {t.subject}
                       </span>}
@@ -1589,6 +1876,11 @@ function GanttView({ tasks, todayX, gRef, onEdit, onDel, onReorder, onInlineSave
           onCancel={() => setPendingDel(null)}
         />
       )}
+      {tooltip && (
+        <div style={{ position: 'fixed', left: tooltip.x, top: tooltip.y, zIndex: 9999, background: '#1E293B', color: '#F1F5F9', padding: '6px 11px', borderRadius: 7, fontSize: 12, maxWidth: 360, wordBreak: 'break-word', boxShadow: '0 4px 16px rgba(0,0,0,0.25)', pointerEvents: 'none', lineHeight: 1.5 }}>
+          {tooltip.text}
+        </div>
+      )}
     </div>
   );
 }
@@ -1629,7 +1921,7 @@ function ListView({ tasks, onEdit, onDel, onReorder }: any) {
               <tr key={t.id}
                 draggable
                 onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; setDragId(t.id); }}
-                onDragOver={(e) => { e.preventDefault(); setDragOverId(t.id); }}
+                onDragOver={(e) => { e.preventDefault(); if (dragOverId !== t.id) setDragOverId(t.id); }}
                 onDrop={() => handleDrop(t.id)}
                 onDragEnd={() => { setDragId(null); setDragOverId(null); }}
                 style={{ borderBottom: `1px solid ${T.border}`, background: isDragOver ? '#EEF2FF' : i % 2 === 0 ? '#fff' : '#FAFBFF', opacity: isDragging ? 0.4 : 1, transition: 'background 0.1s' }}>
@@ -1780,8 +2072,8 @@ function TaskModal({ task, onSave, onClose }: any) {
 // ── Project Modal ─────────────────────────────────────────────────────
 function ProjectModal({ project, onSave, onClose }: any) {
   const [f, setF] = useState(() => project
-    ? { ...project, planStart: project.plan_start || '', planEnd: project.plan_end || '' }
-    : { name: '', irCode: '', description: '', color: '#6366F1', planStart: '', planEnd: '' });
+    ? { ...project, planStart: project.plan_start || '', planEnd: project.plan_end || '', strategicDirection: project.strategic_direction || '' }
+    : { name: '', irCode: '', description: '', color: '#6366F1', planStart: '', planEnd: '', strategicDirection: '' });
   const upd = (k: string, v: any) => setF((p: any) => ({ ...p, [k]: v }));
 
   return (
@@ -1790,6 +2082,7 @@ function ProjectModal({ project, onSave, onClose }: any) {
         <h3 style={{ margin: '0 0 22px', fontSize: 16, fontWeight: 700, color: T.text }}>{project ? 'Edit Project' : 'New Project'}</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
           <div><label style={T.label}>Project Name *</label><input value={f.name} onChange={(e) => upd('name', e.target.value)} placeholder="e.g. ERP System Implementation" style={T.input} /></div>
+          <div><label style={T.label}>Strategic Direction</label><input value={f.strategicDirection || ''} onChange={(e) => upd('strategicDirection', e.target.value)} placeholder="e.g. Digital Transformation, AI Innovation…" style={T.input} /></div>
           <div><label style={T.label}>IR Code</label><input value={f.irCode || ''} onChange={(e) => upd('irCode', e.target.value)} placeholder="e.g. IR-CRA-2025-001" style={T.input} /></div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div><label style={T.label}>Plan Start</label><input type="date" value={f.planStart || ''} onChange={(e) => upd('planStart', e.target.value)} style={T.input} /></div>

@@ -5,10 +5,13 @@ export async function apiFetch<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const token = localStorage.getItem('tracker_token');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
 
   try {
     const res = await fetch(`${BASE}${path}`, {
       ...options,
+      signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -23,8 +26,10 @@ export async function apiFetch<T>(
 
     return res.json();
   } catch (error) {
-    console.error('API Error:', error);
+    if ((error as any)?.name === 'AbortError') throw new Error('Request timed out');
     throw error;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
